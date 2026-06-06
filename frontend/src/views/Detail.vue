@@ -26,7 +26,18 @@
 
         <el-col :span="10">
           <div class="item-info">
-            <h1 class="item-title">{{ item.title }}</h1>
+            <div class="title-row">
+              <h1 class="item-title">{{ item.title }}</h1>
+              <button
+                class="favorite-btn"
+                :class="{ favorited: isFavorited(item.id) }"
+                @click.stop="handleToggleFavorite"
+              >
+                <el-icon :size="28">
+                  <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
+                </el-icon>
+              </button>
+            </div>
             
             <div class="item-meta">
               <el-tag type="primary" effect="plain">{{ item.categoryName }}</el-tag>
@@ -104,9 +115,13 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
+import { useFavoriteStore } from '@/stores/favorite'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
+const favoriteStore = useFavoriteStore()
+const userStore = useUserStore()
 
 const item = ref(null)
 const currentImage = ref('')
@@ -122,12 +137,30 @@ const myItems = ref([
   { id: 2, title: '我的闲置物品2' }
 ])
 
+const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
+
+const handleToggleFavorite = async () => {
+  if (item.value) {
+    const result = await favoriteStore.toggleFavorite(item.value.id)
+    if (result !== false && item.value) {
+      item.value.favorited = favoriteStore.isFavorited(item.value.id)
+    }
+  }
+}
+
 const loadDetail = async () => {
   try {
-    const res = await api.get(`/item/${route.params.id}`)
+    const params = {}
+    if (userStore.isLoggedIn && userStore.userInfo.id) {
+      params.userId = userStore.userInfo.id
+    }
+    const res = await api.get(`/item/${route.params.id}`, { params })
     if (res.data.success) {
       item.value = res.data.data
       currentImage.value = res.data.data.images?.[0] || ''
+      if (res.data.data.favorited) {
+        favoriteStore.setItemFavorited(res.data.data.id, true)
+      }
     }
   } catch (e) {
     item.value = {
@@ -227,11 +260,47 @@ onMounted(() => {
 }
 
 .item-info {
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
   .item-title {
     font-size: 28px;
     font-weight: 600;
     color: #303133;
-    margin-bottom: 16px;
+    margin: 0;
+    flex: 1;
+  }
+
+  .favorite-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    color: #c0c4cc;
+
+    &:hover {
+      background: #fef0f0;
+      color: #f56c6c;
+      transform: scale(1.1);
+    }
+
+    &.favorited {
+      color: #f56c6c;
+
+      &:hover {
+        background: #fef0f0;
+        color: #f78989;
+      }
+    }
   }
 
   .item-meta {

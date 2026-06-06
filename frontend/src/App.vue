@@ -60,14 +60,16 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
+import { useFavoriteStore } from '@/stores/favorite'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
+const favoriteStore = useFavoriteStore()
 
 const showLogin = ref(false)
 const loginForm = ref({
@@ -81,25 +83,33 @@ const handleMenuSelect = (index) => {
   router.push(index)
 }
 
-const handleLogin = () => {
+const handleLogin = async () => {
   if (!loginForm.value.username || !loginForm.value.password) {
     ElMessage.warning('请输入用户名和密码')
     return
   }
-  userStore.login(loginForm.value)
+  await userStore.login(loginForm.value)
   showLogin.value = false
   ElMessage.success('登录成功')
+  favoriteStore.loadFavorites()
 }
 
 const handleUserCommand = (command) => {
   if (command === 'logout') {
     userStore.logout()
+    favoriteStore.loadFavorites()
     ElMessage.success('已退出登录')
     router.push('/')
   } else if (command === 'profile') {
     router.push('/my')
   }
 }
+
+onMounted(() => {
+  if (userStore.isLoggedIn) {
+    favoriteStore.loadFavorites()
+  }
+})
 </script>
 
 <style lang="scss">

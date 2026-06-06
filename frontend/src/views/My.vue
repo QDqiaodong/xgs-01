@@ -73,6 +73,35 @@
         </div>
         <el-empty v-if="offlineItems.length === 0" description="暂无已下架物品" />
       </el-tab-pane>
+
+      <el-tab-pane label="我的收藏" name="favorites">
+        <div class="card-grid">
+          <div 
+            v-for="item in favoriteItems" 
+            :key="item.id" 
+            class="item-card"
+            @click="goDetail(item.id)"
+          >
+            <button
+              class="card-favorite-btn favorited"
+              @click.stop="removeFromFavorites(item)"
+            >
+              <el-icon :size="20"><HeartFilled /></el-icon>
+            </button>
+            <img :src="item.images?.[0] || 'https://picsum.photos/400/300'" class="item-image" />
+            <div class="item-content">
+              <div class="item-title">{{ item.title }}</div>
+              <span class="item-category">{{ item.categoryName }}</span>
+              <div class="item-desc">{{ item.description }}</div>
+              <div class="item-footer">
+                <span class="item-condition">{{ item.condition }}</span>
+                <span class="item-time">{{ item.createTime }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <el-empty v-if="favoriteItems.length === 0 && !favoriteLoading" description="暂无收藏物品" />
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="showEditDialog" title="编辑物品" width="600px">
@@ -96,13 +125,59 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
+import { useFavoriteStore } from '@/stores/favorite'
+
+const router = useRouter()
+const favoriteStore = useFavoriteStore()
 
 const activeTab = ref('published')
 const showEditDialog = ref(false)
 const editForm = ref({})
+const favoriteLoading = ref(false)
+
+const favoriteItems = ref([])
+
+watch(activeTab, (newVal) => {
+  if (newVal === 'favorites') {
+    loadFavorites()
+  }
+})
+
+const loadFavorites = async () => {
+  favoriteLoading.value = true
+  try {
+    await favoriteStore.loadFavorites()
+    favoriteItems.value = [...favoriteStore.favoriteItems]
+  } catch (e) {
+    console.log('加载收藏列表失败')
+  } finally {
+    favoriteLoading.value = false
+  }
+}
+
+const removeFromFavorites = async (item) => {
+  try {
+    await ElMessageBox.confirm('确定要取消收藏该物品吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    await favoriteStore.toggleFavorite(item.id)
+    favoriteItems.value = favoriteItems.value.filter(i => Number(i.id) !== Number(item.id))
+  } catch (e) {
+    if (e !== 'cancel') {
+      favoriteItems.value = favoriteItems.value.filter(i => Number(i.id) !== Number(item.id))
+    }
+  }
+}
+
+const goDetail = (id) => {
+  router.push(`/detail/${id}`)
+}
 
 const publishedItems = ref([
   {
@@ -256,6 +331,36 @@ onMounted(async () => {
   .offline-badge {
     background: #909399;
     color: white;
+  }
+
+  .card-favorite-btn {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    z-index: 2;
+    background: rgba(255, 255, 255, 0.95);
+    border: none;
+    cursor: pointer;
+    padding: 6px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    color: #c0c4cc;
+
+    &:hover {
+      transform: scale(1.15);
+    }
+
+    &.favorited {
+      color: #f56c6c;
+
+      &:hover {
+        color: #f78989;
+      }
+    }
   }
 
   .item-actions {

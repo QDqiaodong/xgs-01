@@ -58,6 +58,15 @@
         class="item-card"
         @click="goDetail(item.id)"
       >
+        <button
+          class="card-favorite-btn"
+          :class="{ favorited: isFavorited(item.id) }"
+          @click.stop="toggleFavorite(item)"
+        >
+          <el-icon :size="20">
+            <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
+          </el-icon>
+        </button>
         <img :src="item.images?.[0] || 'https://picsum.photos/400/300'" class="item-image" />
         <div class="item-content">
           <div class="item-title">{{ item.title }}</div>
@@ -91,9 +100,22 @@
 import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import api from '@/utils/api'
+import { useFavoriteStore } from '@/stores/favorite'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
+const favoriteStore = useFavoriteStore()
+const userStore = useUserStore()
+
+const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
+
+const toggleFavorite = async (item) => {
+  const result = await favoriteStore.toggleFavorite(item.id)
+  if (result !== undefined) {
+    item.favorited = favoriteStore.isFavorited(item.id)
+  }
+}
 
 const loading = ref(false)
 const items = ref([])
@@ -136,10 +158,15 @@ const mockItems = () => {
 const handleSearch = async () => {
   loading.value = true
   try {
-    const res = await api.get('/item/list', { params: filterForm.value })
+    const params = { ...filterForm.value }
+    if (userStore.isLoggedIn && userStore.userInfo.id) {
+      params.userId = userStore.userInfo.id
+    }
+    const res = await api.get('/item/list', { params })
     if (res.data.success) {
       items.value = res.data.data.list
       total.value = res.data.data.total
+      favoriteStore.setFavoritedFromItems(res.data.data.list)
     }
   } catch (e) {
     items.value = mockItems()

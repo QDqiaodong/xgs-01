@@ -28,6 +28,15 @@
           class="item-card"
           @click="goDetail(item.id)"
         >
+          <button
+            class="card-favorite-btn"
+            :class="{ favorited: isFavorited(item.id) }"
+            @click.stop="toggleFavorite(item)"
+          >
+            <el-icon :size="20">
+              <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
+            </el-icon>
+          </button>
           <img :src="item.images[0] || 'https://picsum.photos/400/300'" class="item-image" />
           <div class="item-content">
             <div class="item-title">{{ item.title }}</div>
@@ -71,8 +80,21 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/utils/api'
+import { useFavoriteStore } from '@/stores/favorite'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const favoriteStore = useFavoriteStore()
+const userStore = useUserStore()
+
+const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
+
+const toggleFavorite = async (item) => {
+  const result = await favoriteStore.toggleFavorite(item.id)
+  if (result !== undefined) {
+    item.favorited = favoriteStore.isFavorited(item.id)
+  }
+}
 
 const topItems = ref([
   {
@@ -132,9 +154,14 @@ const goMarket = (categoryId) => {
 
 onMounted(async () => {
   try {
-    const res = await api.get('/item/top')
+    const params = {}
+    if (userStore.isLoggedIn && userStore.userInfo.id) {
+      params.userId = userStore.userInfo.id
+    }
+    const res = await api.get('/item/top', { params })
     if (res.data.success) {
       topItems.value = res.data.data
+      favoriteStore.setFavoritedFromItems(res.data.data)
     }
   } catch (e) {
     console.log('使用模拟数据')

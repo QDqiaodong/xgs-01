@@ -4,9 +4,11 @@ import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.swapmarket.common.PageResult;
 import com.swapmarket.entity.Category;
+import com.swapmarket.entity.Favorite;
 import com.swapmarket.entity.Item;
 import com.swapmarket.entity.ItemImage;
 import com.swapmarket.mapper.CategoryMapper;
+import com.swapmarket.mapper.FavoriteMapper;
 import com.swapmarket.mapper.ItemImageMapper;
 import com.swapmarket.mapper.ItemMapper;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +27,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -35,6 +38,7 @@ public class ItemService {
     private final ItemMapper itemMapper;
     private final ItemImageMapper itemImageMapper;
     private final CategoryMapper categoryMapper;
+    private final FavoriteMapper favoriteMapper;
     private final FileStorageService fileStorageService;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -147,6 +151,10 @@ public class ItemService {
     }
 
     private void enrichItems(List<Item> items) {
+        enrichItems(items, null);
+    }
+
+    private void enrichItems(List<Item> items, Long userId) {
         if (items.isEmpty()) return;
 
         Map<Long, String> categoryMap = categoryMapper.selectList(null).stream()
@@ -162,9 +170,106 @@ public class ItemService {
                         Collectors.mapping(ItemImage::getImageUrl, Collectors.toList())
                 ));
 
+        Set<Long> favoriteItemIds = null;
+        if (userId != null) {
+            favoriteItemIds = favoriteMapper.selectList(new LambdaQueryWrapper<Favorite>()
+                            .eq(Favorite::getUserId, userId)
+                            .in(Favorite::getItemId, itemIds))
+                    .stream()
+                    .map(Favorite::getItemId)
+                    .collect(Collectors.toSet());
+        }
+
         for (Item item : items) {
             item.setCategoryName(categoryMap.get(item.getCategoryId()));
             item.setImages(imageMap.getOrDefault(item.getId(), new ArrayList<>()));
+            if (userId != null) {
+                item.setFavorited(favoriteItemIds.contains(item.getId()));
+            }
         }
+    }
+
+    @Transactional
+    public void addFavorite(Long userId, Long itemId) {
+        Favorite existing = favoriteMapper.selectOne(new LambdaQueryWrapper<Favorite>()
+                .eq(Favorite::getUserId, userId)
+                .eq(Favorite::getItemId, itemId));
+        if (existing != null) {
+            return;
+        }
+        Favorite favorite = new Favorite();
+        favorite.setUserId(userId);
+        favorite.setItemId(itemId);
+        favoriteMapper.insert(favorite);
+    }
+
+    @Transactional
+    public void removeFavorite(Long userId, Long itemId) {
+        favoriteMapper.delete(new LambdaQueryWrapper<Favorite>()
+                .eq(Favorite::getUserId, userId)
+                .eq(Favorite::getItemId, itemId));
+    }
+
+    public List<Item> getMyFavorites(Long userId) {
+        List<Long> favoriteItemIds = favoriteMapper.selectList(new LambdaQueryWrapper<Favorite>()
+                        .eq(Favorite::getUserId, userId)
+                        .orderByDesc(Favorite::getCreateTime))
+                .stream()
+                .map(Favorite::getItemId)
+                .collect(Collectors.toList());
+
+        if (favoriteItemIds.isEmpty()) {
+            return new ArrayList<>();
+        }
+
+        List<Item> items = itemMapper.selectList(new LambdaQueryWrapper<Item>()
+                .in(Item::getId, favoriteItemIds)
+                .eq(Item::getStatus, "published"));
+
+        enrichItems(items, userId);
+
+        Map<Long, Integer> orderMap = new java.util.HashMap<>();
+        for (int i = 0; i < favoriteItemIds.size(); i++) {
+            orderMap.put(favoriteItemIds.get(i), i);
+        }
+        items.sort((a, b) -> {
+            Integer oa = orderMap.get(a.getId());
+            Integer ob = orderMap.get(b.getId());
+            return oa.compareTo(ob);
+        });
+
+        return items;
+    }
+
+    public List<Item> getTopItems(Long userId) {
+        List<Item> items = getTopItems();
+        if (userId != null) {
+            enrichItems(items, userId);
+        }
+        return items;
+    }
+
+    public PageResult<Item> listItems(int page, int size, Long categoryId, String condition, String keyword, Long userId) {
+        PageResult<Item> result = listItems(page, size, categoryId, condition, keyword);
+        if (userId != null) {
+            enrichItems(result.getList(), userId);
+        }
+        return result;
+    }
+
+    public List<Item> getMyItems(Long userId, String status, Long currentUserId) {
+        List<Item> items = getMyItems(userId, status);
+        if (currentUserId != null) {
+            enrichItems(items, currentUserId);
+        }
+        return items;
+    }
+
+    public Item getDetail(Long id, Long userId) {
+        Item item = getDetail(id);
+        if (item != null && userId != null) {
+            enrichItems(List.of(item), userId);
+        }
+        return item;
     }
 }

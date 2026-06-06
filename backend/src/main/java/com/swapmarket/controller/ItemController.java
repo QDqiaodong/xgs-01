@@ -19,8 +19,8 @@ public class ItemController {
     private final ItemService itemService;
 
     @GetMapping("/top")
-    public Result<List<Item>> getTopItems() {
-        return Result.success(itemService.getTopItems());
+    public Result<List<Item>> getTopItems(@RequestParam(required = false) Long userId) {
+        return Result.success(itemService.getTopItems(userId));
     }
 
     @GetMapping("/list")
@@ -29,20 +29,38 @@ public class ItemController {
             @RequestParam(defaultValue = "12") int size,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) String condition,
-            @RequestParam(required = false) String keyword) {
-        return Result.success(itemService.listItems(page, size, categoryId, condition, keyword));
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Long userId) {
+        return Result.success(itemService.listItems(page, size, categoryId, condition, keyword, userId));
     }
 
     @GetMapping("/my")
     public Result<List<Item>> getMyItems(
             @RequestParam(defaultValue = "1") Long userId,
             @RequestParam(required = false) String status) {
-        return Result.success(itemService.getMyItems(userId, status));
+        return Result.success(itemService.getMyItems(userId, status, userId));
+    }
+
+    @GetMapping("/favorites")
+    public Result<List<Item>> getMyFavorites(@RequestParam(defaultValue = "1") Long userId) {
+        return Result.success(itemService.getMyFavorites(userId));
+    }
+
+    @PostMapping("/favorite/{id}")
+    public Result<Void> addFavorite(@RequestParam(defaultValue = "1") Long userId, @PathVariable Long id) {
+        itemService.addFavorite(userId, id);
+        return Result.success();
+    }
+
+    @DeleteMapping("/favorite/{id}")
+    public Result<Void> removeFavorite(@RequestParam(defaultValue = "1") Long userId, @PathVariable Long id) {
+        itemService.removeFavorite(userId, id);
+        return Result.success();
     }
 
     @GetMapping("/{id}")
-    public Result<Item> getDetail(@PathVariable Long id) {
-        return Result.success(itemService.getDetail(id));
+    public Result<Item> getDetail(@PathVariable Long id, @RequestParam(required = false) Long userId) {
+        return Result.success(itemService.getDetail(id, userId));
     }
 
     @PostMapping("/publish")

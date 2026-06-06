@@ -43,4 +43,7 @@ public class Item {
     
     @TableField(exist = false)
     private String categoryName;
+
+    @TableField(exist = false)
+    private Boolean favorited;
 }

@@ -69,6 +69,17 @@ CREATE TABLE IF NOT EXISTS swap_offer (
     INDEX idx_status(status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS favorite (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    item_id BIGINT NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT DEFAULT 0,
+    UNIQUE KEY uk_user_item(user_id, item_id),
+    INDEX idx_user_id(user_id),
+    INDEX idx_item_id(item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT IGNORE INTO category (id, name, icon, sort_order) VALUES
 (1, '数码家电', 'Monitor', 1),
 (2, '图书文具', 'Reading', 2),
