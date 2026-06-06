@@ -41,7 +41,7 @@
           <img :src="item.images[0] || 'https://picsum.photos/400/300'" class="item-image" />
           <div class="item-content">
             <div class="item-title">{{ item.title }}</div>
-            <span class="item-category">{{ item.categoryName }}</span>
+            <span class="item-category">{{ getCategoryName(item) }}</span>
             <div class="item-desc">{{ item.description }}</div>
             <div class="item-footer">
               <span class="item-condition">{{ item.condition }}</span>
@@ -81,6 +81,7 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/utils/api'
+import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useUserStore } from '@/stores/user'
 

@@ -17,12 +17,12 @@ export const useUserStore = defineStore('user', () => {
         token.value = t
         localStorage.setItem('userInfo', JSON.stringify(user))
         localStorage.setItem('token', t)
+        return true
+      } else {
+        return false
       }
     } catch (e) {
-      userInfo.value = { id: 1, username: form.username, nickname: form.username }
-      token.value = 'mock-token-' + Date.now()
-      localStorage.setItem('userInfo', JSON.stringify(userInfo.value))
-      localStorage.setItem('token', token.value)
+      return false
     }
   }
 

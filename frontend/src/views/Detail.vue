@@ -41,7 +41,7 @@
             </div>
             
             <div class="item-meta">
-              <el-tag type="primary" effect="plain">{{ item.categoryName }}</el-tag>
+              <el-tag type="primary" effect="plain">{{ getCategoryName(item) }}</el-tag>
               <el-tag effect="plain">{{ item.condition }}</el-tag>
               <span class="publish-time">发布于 {{ item.createTime }}</span>
             </div>
@@ -116,6 +116,7 @@ import { ref, onMounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
+import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useUserStore } from '@/stores/user'
 

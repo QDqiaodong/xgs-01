@@ -88,10 +88,14 @@ const handleLogin = async () => {
     ElMessage.warning('请输入用户名和密码')
     return
   }
-  await userStore.login(loginForm.value)
-  showLogin.value = false
-  ElMessage.success('登录成功')
-  favoriteStore.loadFavorites()
+  const success = await userStore.login(loginForm.value)
+  if (success) {
+    showLogin.value = false
+    ElMessage.success('登录成功')
+    favoriteStore.loadFavorites()
+  } else {
+    ElMessage.error('登录失败，用户名或密码错误')
+  }
 }
 
 const handleUserCommand = (command) => {
