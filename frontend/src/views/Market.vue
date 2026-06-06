@@ -1,5 +1,5 @@
 <template>
-  <div class="page-container">
+  <div class="page-container market-page">
     <h1 class="page-title">物品市集</h1>
 
     <div class="filter-bar">
@@ -51,7 +51,7 @@
       </el-form>
     </div>
 
-    <div class="card-grid">
+    <div class="card-grid" ref="cardGridRef">
       <div 
         v-for="item in items" 
         :key="item.id" 
@@ -81,16 +81,10 @@
       </div>
     </div>
 
-    <div class="pagination-wrapper" v-if="total > 0">
-      <el-pagination
-        v-model:current-page="filterForm.page"
-        v-model:page-size="filterForm.size"
-        :total="total"
-        :page-sizes="[12, 24, 48]"
-        layout="total, sizes, prev, pager, next, jumper"
-        @size-change="handleSearch"
-        @current-change="handleSearch"
-      />
+    <div class="load-more" v-if="items.length > 0">
+      <el-icon v-if="loading" class="is-loading" :size="18"><Loading /></el-icon>
+      <span v-if="loading">加载中...</span>
+      <span v-else-if="noMore" class="no-more">—— 没有更多了 ——</span>
     </div>
 
     <el-empty v-if="items.length === 0 && !loading" description="暂无物品" />
@@ -98,8 +92,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
+import { Loading } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useUserStore } from '@/stores/user'
@@ -118,9 +113,11 @@ const toggleFavorite = async (item) => {
   }
 }
 
+const cardGridRef = ref(null)
 const loading = ref(false)
 const items = ref([])
 const total = ref(0)
+const noMore = ref(false)
 
 const categories = ref([
   { id: 1, name: '数码家电' },
@@ -140,18 +137,23 @@ const filterForm = ref({
   size: 12
 })
 
-const mockItems = () => {
+const imageHeights = [200, 260, 320, 240, 360, 280, 220, 300, 340, 250, 380, 270]
+
+const mockItems = (page = 1, size = 12) => {
   const list = []
-  for (let i = 0; i < 12; i++) {
+  const start = (page - 1) * size
+  for (let i = 0; i < size; i++) {
+    const idx = start + i
+    const h = imageHeights[idx % imageHeights.length]
     list.push({
       _isMock: true,
-      id: i + 1,
-      title: ['闲置书籍', '家用电器', '儿童玩具', '运动器材', '数码产品', '家居装饰'][i % 6] + (i + 1),
-      categoryName: categories.value[i % 6].name,
+      id: idx + 1,
+      title: ['闲置书籍', '家用电器', '儿童玩具', '运动器材', '数码产品', '家居装饰'][idx % 6] + (idx + 1),
+      categoryName: categories.value[idx % 6].name,
       description: '这是一件非常好的闲置物品，希望能找到需要它的人',
-      condition: ['全新', '九成新', '八成新', '七成新'][i % 4],
-      createTime: '2天前',
-      images: [`https://picsum.photos/400/300?random=${i + 10}`]
+      condition: ['全新', '九成新', '八成新', '七成新'][idx % 4],
+      createTime: `${(idx % 7) + 1}天前`,
+      images: [`https://picsum.photos/400/${h}?random=${idx + 10}`]
     })
   }
   return list
@@ -159,6 +161,8 @@ const mockItems = () => {
 
 const handleSearch = async () => {
   loading.value = true
+  noMore.value = false
+  filterForm.value.page = 1
   try {
     const params = { ...filterForm.value }
     if (userStore.isLoggedIn && userStore.userInfo.id) {
@@ -168,11 +172,45 @@ const handleSearch = async () => {
     if (res.data.success) {
       items.value = res.data.data.list
       total.value = res.data.data.total
+      noMore.value = items.value.length >= total.value
       favoriteStore.setFavoritedFromItems(res.data.data.list)
     }
   } catch (e) {
-    items.value = mockItems()
-    total.value = 50
+    items.value = mockItems(1, filterForm.value.size)
+    total.value = 60
+    noMore.value = false
+  } finally {
+    loading.value = false
+  }
+  await nextTick()
+  checkScroll()
+}
+
+const loadMore = async () => {
+  if (loading.value || noMore.value) return
+  loading.value = true
+  filterForm.value.page += 1
+  try {
+    const params = { ...filterForm.value }
+    if (userStore.isLoggedIn && userStore.userInfo.id) {
+      params.userId = userStore.userInfo.id
+    }
+    const res = await api.get('/item/list', { params })
+    if (res.data.success) {
+      const newList = res.data.data.list
+      items.value = [...items.value, ...newList]
+      total.value = res.data.data.total
+      if (newList.length === 0 || items.value.length >= total.value) {
+        noMore.value = true
+      }
+      favoriteStore.setFavoritedFromItems(newList)
+    }
+  } catch (e) {
+    const newList = mockItems(filterForm.value.page, filterForm.value.size)
+    items.value = [...items.value, ...newList]
+    if (filterForm.value.page >= 5) {
+      noMore.value = true
+    }
   } finally {
     loading.value = false
   }
@@ -194,18 +232,57 @@ const goDetail = (id) => {
   router.push(`/detail/${id}`)
 }
 
+const checkScroll = () => {
+  const scrollTop = window.scrollY || document.documentElement.scrollTop
+  const windowHeight = window.innerHeight || document.documentElement.clientHeight
+  const scrollHeight = document.documentElement.scrollHeight
+  if (scrollTop + windowHeight >= scrollHeight - 200) {
+    loadMore()
+  }
+}
+
+const onScroll = () => {
+  checkScroll()
+}
+
 onMounted(() => {
   if (route.query.category) {
     filterForm.value.categoryId = Number(route.query.category)
   }
   handleSearch()
+  window.addEventListener('scroll', onScroll)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('scroll', onScroll)
 })
 </script>
 
 <style lang="scss" scoped>
-.pagination-wrapper {
+.load-more {
   display: flex;
   justify-content: center;
-  margin-top: 30px;
+  align-items: center;
+  gap: 8px;
+  padding: 30px 0 10px;
+  color: #909399;
+  font-size: 14px;
+
+  .is-loading {
+    animation: rotating 1s linear infinite;
+  }
+
+  .no-more {
+    color: #c0c4cc;
+  }
+}
+
+@keyframes rotating {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 </style>
