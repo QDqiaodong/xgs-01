@@ -191,6 +191,16 @@ public class ItemService {
 
     @Transactional
     public void addFavorite(Long userId, Long itemId) {
+        Item item = itemMapper.selectById(itemId);
+        if (item == null || item.getDeleted() == 1) {
+            throw new RuntimeException("物品不存在");
+        }
+        if (!"published".equals(item.getStatus())) {
+            throw new RuntimeException("物品已下架，无法收藏");
+        }
+        if (item.getUserId().equals(userId)) {
+            throw new RuntimeException("不能收藏自己发布的物品");
+        }
         Favorite existing = favoriteMapper.selectOne(new LambdaQueryWrapper<Favorite>()
                 .eq(Favorite::getUserId, userId)
                 .eq(Favorite::getItemId, itemId));
@@ -205,6 +215,10 @@ public class ItemService {
 
     @Transactional
     public void removeFavorite(Long userId, Long itemId) {
+        Item item = itemMapper.selectById(itemId);
+        if (item == null || item.getDeleted() == 1) {
+            throw new RuntimeException("物品不存在");
+        }
         favoriteMapper.delete(new LambdaQueryWrapper<Favorite>()
                 .eq(Favorite::getUserId, userId)
                 .eq(Favorite::getItemId, itemId));

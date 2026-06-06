@@ -19,6 +19,7 @@ public class Item {
     
     private Long categoryId;
     
+    @TableField("`condition`")
     private String condition;
     
     private String expectedSwap;

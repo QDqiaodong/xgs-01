@@ -29,6 +29,7 @@
             <div class="title-row">
               <h1 class="item-title">{{ item.title }}</h1>
               <button
+                v-if="!item._isMock"
                 class="favorite-btn"
                 :class="{ favorited: isFavorited(item.id) }"
                 @click.stop="handleToggleFavorite"
@@ -164,6 +165,7 @@ const loadDetail = async () => {
     }
   } catch (e) {
     item.value = {
+      _isMock: true,
       id: route.params.id,
       title: '小米空气净化器Pro H',
       categoryName: '数码家电',

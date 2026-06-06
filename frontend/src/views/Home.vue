@@ -29,6 +29,7 @@
           @click="goDetail(item.id)"
         >
           <button
+            v-if="!item._isMock"
             class="card-favorite-btn"
             :class="{ favorited: isFavorited(item.id) }"
             @click.stop="toggleFavorite(item)"
@@ -98,6 +99,7 @@ const toggleFavorite = async (item) => {
 
 const topItems = ref([
   {
+    _isMock: true,
     id: 1,
     title: '小米空气净化器Pro H',
     categoryName: '数码家电',
@@ -107,6 +109,7 @@ const topItems = ref([
     images: ['https://picsum.photos/400/300?random=1']
   },
   {
+    _isMock: true,
     id: 2,
     title: '儿童绘本套装30册',
     categoryName: '图书文具',
@@ -116,6 +119,7 @@ const topItems = ref([
     images: ['https://picsum.photos/400/300?random=2']
   },
   {
+    _isMock: true,
     id: 3,
     title: '宜家懒人沙发',
     categoryName: '家居用品',
@@ -125,6 +129,7 @@ const topItems = ref([
     images: ['https://picsum.photos/400/300?random=3']
   },
   {
+    _isMock: true,
     id: 4,
     title: '儿童平衡车',
     categoryName: '运动户外',

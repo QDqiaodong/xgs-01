@@ -52,16 +52,9 @@ export const useFavoriteStore = defineStore('favorite', () => {
       }
       return !currentlyFavorited
     } catch (e) {
-      if (currentlyFavorited) {
-        removeId(id)
-        favoriteItems.value = favoriteItems.value.filter(item => Number(item.id) !== id)
-        ElMessage.success('已取消收藏')
-        return false
-      } else {
-        addId(id)
-        ElMessage.success('收藏成功')
-        return true
-      }
+      const errMsg = e.response?.data?.message || '操作失败，请稍后重试'
+      ElMessage.error(errMsg)
+      return undefined
     }
   }
 

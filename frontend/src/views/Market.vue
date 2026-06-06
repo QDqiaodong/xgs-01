@@ -59,6 +59,7 @@
         @click="goDetail(item.id)"
       >
         <button
+          v-if="!item._isMock"
           class="card-favorite-btn"
           :class="{ favorited: isFavorited(item.id) }"
           @click.stop="toggleFavorite(item)"
@@ -143,6 +144,7 @@ const mockItems = () => {
   const list = []
   for (let i = 0; i < 12; i++) {
     list.push({
+      _isMock: true,
       id: i + 1,
       title: ['闲置书籍', '家用电器', '儿童玩具', '运动器材', '数码产品', '家居装饰'][i % 6] + (i + 1),
       categoryName: categories.value[i % 6].name,
