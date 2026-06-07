@@ -25,6 +25,15 @@ public class OfferController {
         ));
     }
 
+    @GetMapping("/list")
+    public Result<List<SwapOffer>> listOffers(@RequestParam(defaultValue = "1") Long userId,
+                                              @RequestParam(required = false) String type) {
+        if ("sent".equals(type)) {
+            return Result.success(swapOfferService.getSentOffers(userId));
+        }
+        return Result.success(swapOfferService.getReceivedOffers(userId));
+    }
+
     @GetMapping("/received")
     public Result<List<SwapOffer>> getReceivedOffers(@RequestParam(defaultValue = "1") Long userId) {
         return Result.success(swapOfferService.getReceivedOffers(userId));

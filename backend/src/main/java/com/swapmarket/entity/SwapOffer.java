@@ -30,4 +30,13 @@ public class SwapOffer {
     
     @TableLogic
     private Integer deleted;
+
+    @TableField(exist = false)
+    private Item fromItem;
+
+    @TableField(exist = false)
+    private Item toItem;
+
+    @TableField(exist = false)
+    private User fromUser;
 }

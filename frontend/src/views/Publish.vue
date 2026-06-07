@@ -131,15 +131,24 @@ const beforeUpload = (file) => {
   return true
 }
 
-const handleFileChange = async (file, fileList) => {
+const handleFileChange = async (file, list) => {
   if (file.raw) {
     const compressed = await compressImages([file.raw])
-    fileList[fileList.length - 1].raw = compressed[0]
+    list[list.length - 1].raw = compressed[0]
+  }
+  fileList.value = list
+  form.value.images = list.map(f => f.raw || f.url)
+  if (formRef.value) {
+    formRef.value.validateField('images')
   }
 }
 
-const handleFileRemove = (file, fileList) => {
-  console.log('file removed')
+const handleFileRemove = (file, list) => {
+  fileList.value = list
+  form.value.images = list.map(f => f.raw || f.url)
+  if (formRef.value) {
+    formRef.value.validateField('images')
+  }
 }
 
 const handleSubmit = async () => {

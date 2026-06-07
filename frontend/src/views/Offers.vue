@@ -98,70 +98,33 @@ import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 
 const activeTab = ref('received')
+const receivedOffers = ref([])
+const sentOffers = ref([])
 
-const receivedOffers = ref([
-  {
-    id: 1,
-    myItem: {
-      title: '小米空气净化器',
-      images: ['https://picsum.photos/100/100?random=301']
-    },
-    targetItem: {
-      title: '儿童绘本套装',
-      images: ['https://picsum.photos/100/100?random=302']
-    },
-    fromUser: { nickname: '邻居小李' },
-    message: '我家孩子很喜欢看书，想用这套绘本换您的净化器',
-    createTime: '2024-01-15 10:30',
-    status: 'pending'
-  },
-  {
-    id: 2,
-    myItem: {
-      title: '宜家懒人沙发',
-      images: ['https://picsum.photos/100/100?random=303']
-    },
-    targetItem: {
-      title: '羽毛球拍一对',
-      images: ['https://picsum.photos/100/100?random=304']
-    },
-    fromUser: { nickname: '运动达人' },
-    message: '球拍几乎全新，只打过几次',
-    createTime: '2024-01-14 15:20',
-    status: 'accepted'
-  }
-])
+const formatTime = (t) => {
+  if (!t) return ''
+  return t.replace('T', ' ').substring(0, 16)
+}
 
-const sentOffers = ref([
-  {
-    id: 3,
-    myItem: {
-      title: '旧笔记本电脑',
-      images: ['https://picsum.photos/100/100?random=305']
-    },
-    targetItem: {
-      title: 'iPad Air',
-      images: ['https://picsum.photos/100/100?random=306']
-    },
-    message: '电脑还能用，办公没问题，想换个平板',
-    createTime: '2024-01-13 09:15',
-    status: 'pending'
-  },
-  {
-    id: 4,
-    myItem: {
-      title: '微波炉',
-      images: ['https://picsum.photos/100/100?random=307']
-    },
-    targetItem: {
-      title: '电饭煲',
-      images: ['https://picsum.photos/100/100?random=308']
-    },
-    message: '微波炉功能完好',
-    createTime: '2024-01-10 14:30',
-    status: 'rejected'
-  }
-])
+const mapReceivedOffer = (o) => ({
+  id: o.id,
+  myItem: o.toItem || { title: '物品已下架', images: [] },
+  targetItem: o.fromItem || { title: '物品已下架', images: [] },
+  fromUser: o.fromUser || { nickname: '未知用户' },
+  message: o.message,
+  createTime: formatTime(o.createTime),
+  status: o.status
+})
+
+const mapSentOffer = (o) => ({
+  id: o.id,
+  myItem: o.fromItem || { title: '物品已下架', images: [] },
+  targetItem: o.toItem || { title: '物品已下架', images: [] },
+  fromUser: o.fromUser || { nickname: '未知用户' },
+  message: o.message,
+  createTime: formatTime(o.createTime),
+  status: o.status
+})
 
 const acceptOffer = async (offer) => {
   try {
@@ -195,16 +158,25 @@ const getStatusText = (status) => {
   return map[status] || status
 }
 
-onMounted(async () => {
+const loadOffers = async () => {
   try {
-    const res = await api.get('/offer/list')
-    if (res.data.success) {
-      receivedOffers.value = res.data.data.filter(o => o.type === 'received')
-      sentOffers.value = res.data.data.filter(o => o.type === 'sent')
+    const [receivedRes, sentRes] = await Promise.all([
+      api.get('/offer/list', { params: { type: 'received' } }),
+      api.get('/offer/list', { params: { type: 'sent' } })
+    ])
+    if (receivedRes.data.success) {
+      receivedOffers.value = receivedRes.data.data.map(mapReceivedOffer)
+    }
+    if (sentRes.data.success) {
+      sentOffers.value = sentRes.data.data.map(mapSentOffer)
     }
   } catch (e) {
-    console.log('使用模拟数据')
+    console.error('加载邀约列表失败', e)
   }
+}
+
+onMounted(() => {
+  loadOffers()
 })
 </script>
 
