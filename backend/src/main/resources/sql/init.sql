@@ -80,6 +80,23 @@ CREATE TABLE IF NOT EXISTS favorite (
     INDEX idx_item_id(item_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS notification (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    type VARCHAR(32) NOT NULL,
+    title VARCHAR(100) NOT NULL,
+    content VARCHAR(500) NOT NULL,
+    offer_id BIGINT,
+    item_id BIGINT,
+    read_flag TINYINT DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT DEFAULT 0,
+    INDEX idx_user_id(user_id),
+    INDEX idx_read_flag(read_flag),
+    INDEX idx_create_time(create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT IGNORE INTO category (id, name, icon, sort_order) VALUES
 (1, '数码家电', 'Monitor', 1),
 (2, '图书文具', 'Reading', 2),

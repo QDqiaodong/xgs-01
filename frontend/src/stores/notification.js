@@ -27,11 +27,11 @@ export const useNotificationStore = defineStore('notification', () => {
   const userStore = useUserStore()
 
   const unreadCount = computed(() =>
-    notifications.value.filter(n => !n.read).length
+    notifications.value.filter(n => !n.readFlag).length
   )
 
   const unreadNotifications = computed(() =>
-    notifications.value.filter(n => !n.read)
+    notifications.value.filter(n => !n.readFlag)
   )
 
   const loadNotifications = async () => {
@@ -41,7 +41,9 @@ export const useNotificationStore = defineStore('notification', () => {
     }
     loading.value = true
     try {
-      const res = await api.get('/notification/list')
+      const res = await api.get('/notification/list', {
+        params: { userId: userStore.userInfo.id }
+      })
       if (res.data.success) {
         notifications.value = res.data.data.map(n => ({
           ...n,
@@ -57,7 +59,7 @@ export const useNotificationStore = defineStore('notification', () => {
           content: '邻居小王 想用「Kindle 电子书阅读器」换您的「小米空气净化器Pro H」',
           offerId: 1,
           itemId: 1,
-          read: false,
+          readFlag: false,
           createTime: '2024-01-20 14:30'
         },
         {
@@ -67,7 +69,7 @@ export const useNotificationStore = defineStore('notification', () => {
           content: '您发出的「用 Switch 换 iPad」邀约已被对方接受',
           offerId: 2,
           itemId: 2,
-          read: false,
+          readFlag: false,
           createTime: '2024-01-19 10:15'
         },
         {
@@ -77,7 +79,7 @@ export const useNotificationStore = defineStore('notification', () => {
           content: '您发出的「用相机换镜头」邀约已被对方驳回',
           offerId: 3,
           itemId: 3,
-          read: true,
+          readFlag: true,
           createTime: '2024-01-18 16:45'
         }
       ]
@@ -88,27 +90,31 @@ export const useNotificationStore = defineStore('notification', () => {
 
   const markAsRead = async (id) => {
     const notification = notifications.value.find(n => n.id === id)
-    if (notification && !notification.read) {
+    if (notification && !notification.readFlag) {
       try {
-        await api.post(`/notification/read/${id}`)
+        await api.post(`/notification/read/${id}`, null, {
+          params: { userId: userStore.userInfo.id }
+        })
       } catch (e) {}
-      notification.read = true
+      notification.readFlag = true
     }
   }
 
   const markAllAsRead = async () => {
     try {
-      await api.post('/notification/read-all')
+      await api.post('/notification/read-all', null, {
+        params: { userId: userStore.userInfo.id }
+      })
     } catch (e) {}
     notifications.value.forEach(n => {
-      n.read = true
+      n.readFlag = true
     })
   }
 
   const addNotification = (notification) => {
     notifications.value.unshift({
       ...notification,
-      read: false,
+      readFlag: false,
       createTime: formatTime(notification.createTime) || formatTime(new Date().toISOString())
     })
   }

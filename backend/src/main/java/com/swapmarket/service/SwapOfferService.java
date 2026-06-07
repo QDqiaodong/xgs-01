@@ -25,6 +25,7 @@ public class SwapOfferService {
     private final ItemMapper itemMapper;
     private final ItemImageMapper itemImageMapper;
     private final UserMapper userMapper;
+    private final NotificationService notificationService;
     private final RedisTemplate<String, Object> redisTemplate;
 
     private static final String PENDING_OFFERS_KEY = "swap:offers:pending:";
@@ -46,6 +47,15 @@ public class SwapOfferService {
         offer.setMessage(message);
         offer.setStatus("pending");
         swapOfferMapper.insert(offer);
+
+        notificationService.createNewOfferNotification(
+                toItem.getUserId(),
+                fromUserId,
+                offer.getId(),
+                toItemId,
+                fromItem.getTitle(),
+                toItem.getTitle()
+        );
 
         redisTemplate.delete(PENDING_OFFERS_KEY + toItem.getUserId());
         return offer;
@@ -96,6 +106,14 @@ public class SwapOfferService {
             itemMapper.updateById(toItem);
         }
 
+        notificationService.createOfferAcceptedNotification(
+                offer.getFromUserId(),
+                offer.getId(),
+                offer.getToItemId(),
+                fromItem != null ? fromItem.getTitle() : "",
+                toItem != null ? toItem.getTitle() : ""
+        );
+
         redisTemplate.delete(PENDING_OFFERS_KEY + userId);
     }
 
@@ -107,8 +125,31 @@ public class SwapOfferService {
         }
         offer.setStatus("rejected");
         swapOfferMapper.updateById(offer);
+
+        Item fromItem = itemMapper.selectById(offer.getFromItemId());
+        Item toItem = itemMapper.selectById(offer.getToItemId());
+
+        notificationService.createOfferRejectedNotification(
+                offer.getFromUserId(),
+                offer.getId(),
+                offer.getToItemId(),
+                fromItem != null ? fromItem.getTitle() : "",
+                toItem != null ? toItem.getTitle() : ""
+        );
         
         redisTemplate.delete(PENDING_OFFERS_KEY + userId);
+    }
+
+    public SwapOffer getOfferDetail(Long userId, Long offerId) {
+        SwapOffer offer = swapOfferMapper.selectById(offerId);
+        if (offer == null) {
+            throw new RuntimeException("邀约不存在");
+        }
+        if (!offer.getFromUserId().equals(userId) && !offer.getToUserId().equals(userId)) {
+            throw new RuntimeException("无权查看该邀约");
+        }
+        enrichOffers(Collections.singletonList(offer));
+        return offer;
     }
 
     private void enrichOffers(List<SwapOffer> offers) {

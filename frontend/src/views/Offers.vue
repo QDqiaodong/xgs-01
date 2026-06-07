@@ -4,7 +4,7 @@
 
     <el-tabs v-model="activeTab" class="offer-tabs">
       <el-tab-pane label="收到的邀约" name="received">
-        <el-card class="offer-card" v-for="offer in receivedOffers" :key="offer.id">
+        <el-card class="offer-card" v-for="offer in receivedOffers" :key="offer.id" @click="goToDetail(offer.id)">
           <div class="offer-content">
             <div class="offer-items">
               <div class="offer-item">
@@ -50,7 +50,7 @@
       </el-tab-pane>
 
       <el-tab-pane label="发出的邀约" name="sent">
-        <el-card class="offer-card" v-for="offer in sentOffers" :key="offer.id">
+        <el-card class="offer-card" v-for="offer in sentOffers" :key="offer.id" @click="goToDetail(offer.id)">
           <div class="offer-content">
             <div class="offer-items">
               <div class="offer-item">
@@ -94,9 +94,11 @@
 
 <script setup>
 import { ref, onMounted } from 'vue'
+import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
 
+const router = useRouter()
 const activeTab = ref('received')
 const receivedOffers = ref([])
 const sentOffers = ref([])
@@ -175,6 +177,10 @@ const loadOffers = async () => {
   }
 }
 
+const goToDetail = (id) => {
+  router.push(`/offer/${id}`)
+}
+
 onMounted(() => {
   loadOffers()
 })
@@ -189,6 +195,12 @@ onMounted(() => {
 
 .offer-card {
   margin-bottom: 16px;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+
+  &:hover {
+    transform: translateY(-2px);
+  }
 
   .offer-content {
     display: flex;

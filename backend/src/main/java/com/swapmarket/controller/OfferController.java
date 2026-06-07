@@ -56,6 +56,11 @@ public class OfferController {
         return Result.success();
     }
 
+    @GetMapping("/{id}")
+    public Result<SwapOffer> getOfferDetail(@RequestParam(defaultValue = "1") Long userId, @PathVariable Long id) {
+        return Result.success(swapOfferService.getOfferDetail(userId, id));
+    }
+
     @Data
     public static class CreateOfferRequest {
         private Long fromUserId = 1L;

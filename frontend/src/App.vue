@@ -54,7 +54,7 @@
                     v-for="item in notificationStore.notifications"
                     :key="item.id"
                     class="notification-item"
-                    :class="{ unread: !item.read }"
+                    :class="{ unread: !item.readFlag }"
                   >
                     <div
                       class="notification-icon-wrap"
@@ -73,7 +73,7 @@
                     </div>
                     <div class="notification-actions">
                       <el-button
-                        v-if="!item.read"
+                        v-if="!item.readFlag"
                         type="text"
                         size="small"
                         @click.stop="handleMarkRead(item.id)"
@@ -82,7 +82,7 @@
                       </el-button>
                       <span v-else class="read-mark">已读</span>
                     </div>
-                    <span v-if="!item.read" class="unread-dot" />
+                    <span v-if="!item.readFlag" class="unread-dot" />
                   </div>
                   <el-empty
                     v-if="notificationStore.notifications.length === 0 && !notificationStore.loading"
@@ -226,11 +226,11 @@ const handleMarkAllRead = () => {
 }
 
 const handleNotificationClick = (item) => {
-  if (!item.read) {
+  if (!item.readFlag) {
     notificationStore.markAsRead(item.id)
   }
-  if (item.itemId) {
-    router.push(`/detail/${item.itemId}`)
+  if (item.offerId) {
+    router.push(`/offer/${item.offerId}`)
   } else {
     router.push('/offers')
   }
