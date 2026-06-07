@@ -1,17 +1,48 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { ElMessage } from 'element-plus'
+import { useUserStore } from '@/stores/user'
 
-const HISTORY_KEY = 'browseHistory'
+const HISTORY_KEY_PREFIX = 'browseHistory'
 const MAX_HISTORY = 100
 
+const getStorageKey = (userId) => {
+  if (userId) {
+    return `${HISTORY_KEY_PREFIX}_${userId}`
+  }
+  return `${HISTORY_KEY_PREFIX}_guest`
+}
+
+const loadFromStorage = (userId) => {
+  const key = getStorageKey(userId)
+  try {
+    return JSON.parse(localStorage.getItem(key) || '[]')
+  } catch (e) {
+    return []
+  }
+}
+
 export const useHistoryStore = defineStore('history', () => {
-  const historyList = ref(JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]'))
+  const userStore = useUserStore()
+  const historyList = ref(loadFromStorage(userStore.userInfo?.id))
+
+  watch(
+    () => userStore.userInfo?.id,
+    (newUserId, oldUserId) => {
+      if (newUserId !== oldUserId) {
+        historyList.value = loadFromStorage(newUserId)
+      }
+    }
+  )
 
   const recentHistory = computed(() => historyList.value.slice(0, 6))
 
+  const getCurrentStorageKey = () => {
+    return getStorageKey(userStore.userInfo?.id)
+  }
+
   const saveToStorage = () => {
-    localStorage.setItem(HISTORY_KEY, JSON.stringify(historyList.value))
+    localStorage.setItem(getCurrentStorageKey(), JSON.stringify(historyList.value))
   }
 
   const addHistory = (item) => {
