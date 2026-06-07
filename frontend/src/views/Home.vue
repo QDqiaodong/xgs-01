@@ -74,20 +74,50 @@
         </div>
       </div>
     </div>
+
+    <div class="section" v-if="recentHistory.length > 0">
+      <div class="section-header">
+        <h2 class="section-title">
+          <el-icon><Clock /></el-icon>
+          最近浏览
+        </h2>
+        <el-link type="primary" @click="$router.push('/my')">查看全部</el-link>
+      </div>
+      <div class="history-scroll">
+        <div 
+          v-for="item in recentHistory" 
+          :key="item.id" 
+          class="history-card"
+          @click="goDetail(item.id)"
+        >
+          <img :src="item.images?.[0] || 'https://picsum.photos/400/300'" class="history-image" />
+          <div class="history-content">
+            <div class="history-title">{{ item.title }}</div>
+            <span class="history-category">{{ getCategoryName(item) }}</span>
+            <div class="history-time">{{ formatBrowseTime(item.browseTime) }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useUserStore } from '@/stores/user'
+import { useHistoryStore } from '@/stores/history'
 
 const router = useRouter()
 const favoriteStore = useFavoriteStore()
 const userStore = useUserStore()
+const historyStore = useHistoryStore()
+
+const recentHistory = computed(() => historyStore.recentHistory)
+const formatBrowseTime = (timestamp) => historyStore.formatBrowseTime(timestamp)
 
 const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
 
@@ -263,6 +293,79 @@ onMounted(async () => {
   .category-count {
     font-size: 14px;
     color: #909399;
+  }
+}
+
+.history-scroll {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  padding-bottom: 12px;
+  scroll-behavior: smooth;
+
+  &::-webkit-scrollbar {
+    height: 6px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #dcdfe6;
+    border-radius: 3px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f5f7fa;
+  }
+}
+
+.history-card {
+  flex-shrink: 0;
+  width: 220px;
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: transform 0.3s, box-shadow 0.3s;
+
+  &:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+
+  .history-image {
+    width: 100%;
+    height: 140px;
+    object-fit: cover;
+    background: #f5f7fa;
+  }
+
+  .history-content {
+    padding: 12px;
+
+    .history-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #303133;
+      margin-bottom: 6px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .history-category {
+      display: inline-block;
+      padding: 1px 6px;
+      background: #ecf5ff;
+      color: #409eff;
+      border-radius: 3px;
+      font-size: 11px;
+      margin-bottom: 6px;
+    }
+
+    .history-time {
+      font-size: 12px;
+      color: #909399;
+    }
   }
 }
 </style>

@@ -102,6 +102,42 @@
         </div>
         <el-empty v-if="favoriteItems.length === 0 && !favoriteLoading" description="暂无收藏物品" />
       </el-tab-pane>
+
+      <el-tab-pane label="浏览历史" name="history">
+        <div class="history-header" v-if="historyList.length > 0">
+          <span class="history-count">共 {{ historyList.length }} 条记录</span>
+          <el-button type="danger" plain size="small" @click="handleClearHistory">
+            <el-icon><Delete /></el-icon>
+            清空历史
+          </el-button>
+        </div>
+        <div class="card-grid">
+          <div 
+            v-for="item in historyList" 
+            :key="item.id" 
+            class="item-card"
+            @click="goDetail(item.id)"
+          >
+            <button
+              class="card-favorite-btn"
+              @click.stop="removeFromHistory(item)"
+            >
+              <el-icon :size="20"><Close /></el-icon>
+            </button>
+            <img :src="item.images?.[0] || 'https://picsum.photos/400/300'" class="item-image" />
+            <div class="item-content">
+              <div class="item-title">{{ item.title }}</div>
+              <span class="item-category">{{ getCategoryName(item) }}</span>
+              <div class="item-desc">{{ item.description }}</div>
+              <div class="item-footer">
+                <span class="item-condition">{{ item.condition }}</span>
+                <span class="item-time">{{ formatBrowseTime(item.browseTime) }}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <el-empty v-if="historyList.length === 0" description="暂无浏览记录" />
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="showEditDialog" title="编辑物品" width="600px">
@@ -125,15 +161,17 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, onMounted, watch, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
+import { useHistoryStore } from '@/stores/history'
 
 const router = useRouter()
 const favoriteStore = useFavoriteStore()
+const historyStore = useHistoryStore()
 
 const activeTab = ref('published')
 const showEditDialog = ref(false)
@@ -141,6 +179,36 @@ const editForm = ref({})
 const favoriteLoading = ref(false)
 
 const favoriteItems = ref([])
+const historyList = computed(() => historyStore.historyList)
+const formatBrowseTime = (timestamp) => historyStore.formatBrowseTime(timestamp)
+
+const removeFromHistory = async (item) => {
+  try {
+    await ElMessageBox.confirm('确定要删除这条浏览记录吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    historyStore.removeHistory(item.id)
+    ElMessage.success('已删除')
+  } catch (e) {
+    if (e !== 'cancel') {
+      historyStore.removeHistory(item.id)
+    }
+  }
+}
+
+const handleClearHistory = async () => {
+  try {
+    await ElMessageBox.confirm('确定要清空全部浏览历史吗？此操作不可恢复。', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    historyStore.clearHistory()
+  } catch (e) {
+  }
+}
 
 watch(activeTab, (newVal) => {
   if (newVal === 'favorites') {
@@ -367,6 +435,22 @@ onMounted(async () => {
   .item-actions {
     display: flex;
     gap: 8px;
+  }
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding: 12px 16px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+  .history-count {
+    font-size: 14px;
+    color: #606266;
   }
 }
 </style>

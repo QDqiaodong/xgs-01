@@ -119,11 +119,13 @@ import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useUserStore } from '@/stores/user'
+import { useHistoryStore } from '@/stores/history'
 
 const router = useRouter()
 const route = useRoute()
 const favoriteStore = useFavoriteStore()
 const userStore = useUserStore()
+const historyStore = useHistoryStore()
 
 const item = ref(null)
 const currentImage = ref('')
@@ -163,6 +165,7 @@ const loadDetail = async () => {
       if (res.data.data.favorited) {
         favoriteStore.setItemFavorited(res.data.data.id, true)
       }
+      historyStore.addHistory(res.data.data)
     }
   } catch (e) {
     item.value = {
@@ -185,6 +188,7 @@ const loadDetail = async () => {
       }
     }
     currentImage.value = item.value.images[0]
+    historyStore.addHistory(item.value)
   }
 }
 
