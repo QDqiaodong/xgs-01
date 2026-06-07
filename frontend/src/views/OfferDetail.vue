@@ -134,6 +134,10 @@ const goToItemDetail = (id) => {
 }
 
 const handleAccept = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录')
+    return
+  }
   try {
     await ElMessageBox.confirm('确定同意该邀约吗？', '确认操作', {
       confirmButtonText: '确定',
@@ -144,7 +148,9 @@ const handleAccept = async () => {
     return
   }
   try {
-    await api.post(`/offer/accept/${route.params.id}`)
+    await api.post(`/offer/accept/${route.params.id}`, null, {
+      params: { userId: userStore.userInfo.id }
+    })
     ElMessage.success('已同意邀约')
     loadDetail()
   } catch (e) {
@@ -153,6 +159,10 @@ const handleAccept = async () => {
 }
 
 const handleReject = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录')
+    return
+  }
   try {
     await ElMessageBox.confirm('确定驳回该邀约吗？', '确认操作', {
       confirmButtonText: '确定',
@@ -163,7 +173,9 @@ const handleReject = async () => {
     return
   }
   try {
-    await api.post(`/offer/reject/${route.params.id}`)
+    await api.post(`/offer/reject/${route.params.id}`, null, {
+      params: { userId: userStore.userInfo.id }
+    })
     ElMessage.success('已驳回邀约')
     loadDetail()
   } catch (e) {

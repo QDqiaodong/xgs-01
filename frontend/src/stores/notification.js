@@ -51,38 +51,7 @@ export const useNotificationStore = defineStore('notification', () => {
         }))
       }
     } catch (e) {
-      notifications.value = [
-        {
-          id: 1,
-          type: NOTIFICATION_TYPES.NEW_OFFER,
-          title: '您收到一条新的互换邀约',
-          content: '邻居小王 想用「Kindle 电子书阅读器」换您的「小米空气净化器Pro H」',
-          offerId: 1,
-          itemId: 1,
-          readFlag: false,
-          createTime: '2024-01-20 14:30'
-        },
-        {
-          id: 2,
-          type: NOTIFICATION_TYPES.OFFER_ACCEPTED,
-          title: '邀约已被接受',
-          content: '您发出的「用 Switch 换 iPad」邀约已被对方接受',
-          offerId: 2,
-          itemId: 2,
-          readFlag: false,
-          createTime: '2024-01-19 10:15'
-        },
-        {
-          id: 3,
-          type: NOTIFICATION_TYPES.OFFER_REJECTED,
-          title: '邀约被驳回',
-          content: '您发出的「用相机换镜头」邀约已被对方驳回',
-          offerId: 3,
-          itemId: 3,
-          readFlag: true,
-          createTime: '2024-01-18 16:45'
-        }
-      ]
+      notifications.value = []
     } finally {
       loading.value = false
     }

@@ -111,8 +111,10 @@ import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import api from '@/utils/api'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
+const userStore = useUserStore()
 const activeTab = ref('received')
 const receivedOffers = ref([])
 const sentOffers = ref([])
@@ -144,23 +146,25 @@ const mapSentOffer = (o) => ({
 
 const acceptOffer = async (offer) => {
   try {
-    await api.post(`/offer/accept/${offer.id}`)
+    await api.post(`/offer/accept/${offer.id}`, null, {
+      params: { userId: userStore.userInfo.id }
+    })
     offer.status = 'accepted'
     ElMessage.success('已同意邀约')
   } catch (e) {
-    offer.status = 'accepted'
-    ElMessage.success('已同意邀约（模拟）')
+    ElMessage.error('操作失败，请稍后重试')
   }
 }
 
 const rejectOffer = async (offer) => {
   try {
-    await api.post(`/offer/reject/${offer.id}`)
+    await api.post(`/offer/reject/${offer.id}`, null, {
+      params: { userId: userStore.userInfo.id }
+    })
     offer.status = 'rejected'
     ElMessage.success('已驳回邀约')
   } catch (e) {
-    offer.status = 'rejected'
-    ElMessage.success('已驳回邀约（模拟）')
+    ElMessage.error('操作失败，请稍后重试')
   }
 }
 
@@ -175,10 +179,15 @@ const getStatusText = (status) => {
 }
 
 const loadOffers = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    receivedOffers.value = []
+    sentOffers.value = []
+    return
+  }
   try {
     const [receivedRes, sentRes] = await Promise.all([
-      api.get('/offer/list', { params: { type: 'received' } }),
-      api.get('/offer/list', { params: { type: 'sent' } })
+      api.get('/offer/list', { params: { type: 'received', userId: userStore.userInfo.id } }),
+      api.get('/offer/list', { params: { type: 'sent', userId: userStore.userInfo.id } })
     ])
     if (receivedRes.data.success) {
       receivedOffers.value = receivedRes.data.data.map(mapReceivedOffer)

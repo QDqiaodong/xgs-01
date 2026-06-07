@@ -2,112 +2,115 @@
   <div class="page-container">
     <el-page-header @back="goBack" content="物品详情" class="page-header" />
 
-    <div class="detail-container" v-if="item">
-      <el-row :gutter="30">
-        <el-col :span="14">
-          <el-image 
-            class="main-image"
-            :src="currentImage" 
-            :preview-src-list="item.images || []"
-            fit="cover"
-          />
-          <div class="image-thumbnails">
-            <div 
-              v-for="(img, index) in item.images" 
-              :key="index"
-              class="thumbnail"
-              :class="{ active: currentImage === img }"
-              @click="currentImage = img"
-            >
-              <img :src="img" />
-            </div>
-          </div>
-        </el-col>
-
-        <el-col :span="10">
-          <div class="item-info">
-            <div class="title-row">
-              <h1 class="item-title">{{ item.title }}</h1>
-              <button
-                v-if="!item._isMock"
-                class="favorite-btn"
-                :class="{ favorited: isFavorited(item.id) }"
-                @click.stop="handleToggleFavorite"
+    <template v-if="item">
+      <div class="detail-container">
+        <el-row :gutter="30">
+          <el-col :span="14">
+            <el-image 
+              class="main-image"
+              :src="currentImage" 
+              :preview-src-list="item.images || []"
+              fit="cover"
+            />
+            <div class="image-thumbnails">
+              <div 
+                v-for="(img, index) in item.images" 
+                :key="index"
+                class="thumbnail"
+                :class="{ active: currentImage === img }"
+                @click="currentImage = img"
               >
-                <el-icon :size="28">
-                  <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
-                </el-icon>
-              </button>
-            </div>
-            
-            <div class="item-meta">
-              <el-tag type="primary" effect="plain">{{ getCategoryName(item) }}</el-tag>
-              <el-tag effect="plain">{{ item.condition }}</el-tag>
-              <span class="publish-time">发布于 {{ item.createTime }}</span>
-            </div>
-
-            <div class="item-section">
-              <h3>物品描述</h3>
-              <p class="item-desc">{{ item.description }}</p>
-            </div>
-
-            <div class="item-section" v-if="item.expectedSwap">
-              <h3>期望互换</h3>
-              <p class="expected-swap">{{ item.expectedSwap }}</p>
-            </div>
-
-            <div class="item-section">
-              <h3>发布者</h3>
-              <div class="publisher">
-                <el-avatar :size="48">{{ item.publisher?.nickname?.[0] || 'U' }}</el-avatar>
-                <div class="publisher-info">
-                  <div class="publisher-name">{{ item.publisher?.nickname || '用户' }}</div>
-                  <div class="publisher-stats">已发布 {{ item.publisher?.itemCount || 0 }} 件物品</div>
-                </div>
+                <img :src="img" />
               </div>
             </div>
+          </el-col>
 
-            <div class="action-buttons">
-              <el-button type="primary" size="large" @click="showOfferDialog = true">
-                <el-icon><Switch /></el-icon>
-                发起互换邀约
-              </el-button>
-              <el-button size="large">
-                <el-icon><Message /></el-icon>
-                私信
-              </el-button>
+          <el-col :span="10">
+            <div class="item-info">
+              <div class="title-row">
+                <h1 class="item-title">{{ item.title }}</h1>
+                <button
+                  class="favorite-btn"
+                  :class="{ favorited: isFavorited(item.id) }"
+                  @click.stop="handleToggleFavorite"
+                >
+                  <el-icon :size="28">
+                    <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
+                  </el-icon>
+                </button>
+              </div>
+              
+              <div class="item-meta">
+                <el-tag type="primary" effect="plain">{{ getCategoryName(item) }}</el-tag>
+                <el-tag effect="plain">{{ item.condition }}</el-tag>
+                <span class="publish-time">发布于 {{ item.createTime }}</span>
+              </div>
+
+              <div class="item-section">
+                <h3>物品描述</h3>
+                <p class="item-desc">{{ item.description }}</p>
+              </div>
+
+              <div class="item-section" v-if="item.expectedSwap">
+                <h3>期望互换</h3>
+                <p class="expected-swap">{{ item.expectedSwap }}</p>
+              </div>
+
+              <div class="item-section">
+                <h3>发布者</h3>
+                <div class="publisher">
+                  <el-avatar :size="48">{{ item.publisher?.nickname?.[0] || 'U' }}</el-avatar>
+                  <div class="publisher-info">
+                    <div class="publisher-name">{{ item.publisher?.nickname || '用户' }}</div>
+                    <div class="publisher-stats">已发布 {{ item.publisher?.itemCount || 0 }} 件物品</div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="action-buttons">
+                <el-button type="primary" size="large" @click="showOfferDialog = true">
+                  <el-icon><Switch /></el-icon>
+                  发起互换邀约
+                </el-button>
+                <el-button size="large">
+                  <el-icon><Message /></el-icon>
+                  私信
+                </el-button>
+              </div>
             </div>
-          </div>
-        </el-col>
-      </el-row>
-    </div>
+          </el-col>
+        </el-row>
+      </div>
 
-    <el-dialog v-model="showOfferDialog" title="发起互换邀约" width="500px">
-      <el-form :model="offerForm" label-width="100px">
-        <el-form-item label="我的物品">
-          <el-select v-model="offerForm.myItemId" placeholder="选择您要交换的物品">
-            <el-option 
-              v-for="item in myItems" 
-              :key="item.id" 
-              :label="item.title" 
-              :value="item.id" 
+      <el-dialog v-model="showOfferDialog" title="发起互换邀约" width="500px">
+        <el-form :model="offerForm" label-width="100px">
+          <el-form-item label="我的物品">
+            <el-select v-model="offerForm.myItemId" placeholder="选择您要交换的物品">
+              <el-option 
+                v-for="item in myItems" 
+                :key="item.id" 
+                :label="item.title" 
+                :value="item.id" 
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="交换说明">
+            <el-input 
+              v-model="offerForm.message" 
+              type="textarea" 
+              :rows="3"
+              placeholder="说明您的交换意向"
             />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="交换说明">
-          <el-input 
-            v-model="offerForm.message" 
-            type="textarea" 
-            :rows="3"
-            placeholder="说明您的交换意向"
-          />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="showOfferDialog = false">取消</el-button>
-        <el-button type="primary" @click="submitOffer">发送邀约</el-button>
-      </template>
-    </el-dialog>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="showOfferDialog = false">取消</el-button>
+          <el-button type="primary" @click="submitOffer">发送邀约</el-button>
+        </template>
+      </el-dialog>
+    </template>
+
+    <el-empty v-else description="物品详情加载失败" />
   </div>
 </template>
 
@@ -136,10 +139,7 @@ const offerForm = ref({
   message: ''
 })
 
-const myItems = ref([
-  { id: 1, title: '我的闲置物品1' },
-  { id: 2, title: '我的闲置物品2' }
-])
+const myItems = ref([])
 
 const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
 
@@ -168,48 +168,56 @@ const loadDetail = async () => {
       historyStore.addHistory(res.data.data)
     }
   } catch (e) {
-    item.value = {
-      _isMock: true,
-      id: route.params.id,
-      title: '小米空气净化器Pro H',
-      categoryName: '数码家电',
-      condition: '九成新',
-      description: '使用一年，功能完好，除醛效果好，适合新房使用。滤芯还剩70%寿命，外观轻微划痕，不影响使用。',
-      expectedSwap: '希望换儿童书籍或者电饭煲之类的',
-      createTime: '2024-01-15 10:30',
-      images: [
-        'https://picsum.photos/800/600?random=101',
-        'https://picsum.photos/800/600?random=102',
-        'https://picsum.photos/800/600?random=103'
-      ],
-      publisher: {
-        nickname: '邻居小王',
-        itemCount: 12
+    item.value = null
+    currentImage.value = ''
+    ElMessage.error('加载物品详情失败')
+  }
+}
+
+const loadMyItems = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    myItems.value = []
+    return
+  }
+  try {
+    const res = await api.get('/item/my', {
+      params: {
+        userId: userStore.userInfo.id,
+        status: 'published'
       }
+    })
+    if (res.data.success) {
+      myItems.value = (res.data.data || []).filter(myItem => Number(myItem.id) !== Number(route.params.id))
     }
-    currentImage.value = item.value.images[0]
-    historyStore.addHistory(item.value)
+  } catch (e) {
+    myItems.value = []
   }
 }
 
 const submitOffer = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录')
+    return
+  }
   if (!offerForm.value.myItemId) {
     ElMessage.warning('请选择要交换的物品')
     return
   }
   try {
     const res = await api.post('/offer/create', {
-      targetItemId: route.params.id,
-      myItemId: offerForm.value.myItemId,
+      fromUserId: userStore.userInfo.id,
+      fromItemId: offerForm.value.myItemId,
+      toItemId: Number(route.params.id),
       message: offerForm.value.message
     })
     if (res.data.success) {
       ElMessage.success('邀约已发送！')
       showOfferDialog.value = false
+      offerForm.value.myItemId = null
+      offerForm.value.message = ''
     }
   } catch (e) {
-    ElMessage.success('邀约已发送！（模拟）')
-    showOfferDialog.value = false
+    ElMessage.error('发送失败，请稍后重试')
   }
 }
 
@@ -219,6 +227,7 @@ const goBack = () => {
 
 onMounted(() => {
   loadDetail()
+  loadMyItems()
 })
 </script>
 

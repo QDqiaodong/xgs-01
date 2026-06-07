@@ -211,9 +211,7 @@ const getIconClass = (type) => {
 }
 
 const handlePopoverShow = () => {
-  if (notificationStore.notifications.length === 0) {
-    notificationStore.loadNotifications()
-  }
+  notificationStore.loadNotifications()
 }
 
 const handleMarkRead = (id) => {

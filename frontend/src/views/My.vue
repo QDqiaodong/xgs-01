@@ -168,10 +168,12 @@ import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useHistoryStore } from '@/stores/history'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const favoriteStore = useFavoriteStore()
 const historyStore = useHistoryStore()
+const userStore = useUserStore()
 
 const activeTab = ref('published')
 const showEditDialog = ref(false)
@@ -248,47 +250,28 @@ const goDetail = (id) => {
   router.push(`/detail/${id}`)
 }
 
-const publishedItems = ref([
-  {
-    id: 1,
-    title: '小米空气净化器Pro H',
-    categoryName: '数码家电',
-    description: '九成新，使用一年，功能完好',
-    condition: '九成新',
-    images: ['https://picsum.photos/400/300?random=201']
-  },
-  {
-    id: 2,
-    title: '儿童绘本套装',
-    categoryName: '图书文具',
-    description: '适合3-6岁儿童阅读',
-    condition: '全新',
-    images: ['https://picsum.photos/400/300?random=202']
-  }
-])
+const publishedItems = ref([])
+const completedItems = ref([])
+const offlineItems = ref([])
 
-const completedItems = ref([
-  {
-    id: 3,
-    title: '宜家懒人沙发',
-    categoryName: '家居用品',
-    description: '舒适休闲，可折叠',
-    condition: '八成新',
-    completeTime: '2024-01-10',
-    images: ['https://picsum.photos/400/300?random=203']
-  }
-])
+const assignMyItems = (items = []) => {
+  publishedItems.value = items.filter(item => item.status === 'published')
+  completedItems.value = items.filter(item => item.status === 'completed')
+  offlineItems.value = items.filter(item => item.status === 'offline')
+}
 
-const offlineItems = ref([
-  {
-    id: 4,
-    title: '旧笔记本电脑',
-    categoryName: '数码家电',
-    description: '联想ThinkPad，i5处理器',
-    condition: '七成新',
-    images: ['https://picsum.photos/400/300?random=204']
+const loadMyItems = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    assignMyItems([])
+    return
   }
-])
+  const res = await api.get('/item/my', {
+    params: { userId: userStore.userInfo.id }
+  })
+  if (res.data.success) {
+    assignMyItems(res.data.data || [])
+  }
+}
 
 const editItem = (item) => {
   editForm.value = { ...item }
@@ -296,14 +279,7 @@ const editItem = (item) => {
 }
 
 const saveEdit = async () => {
-  try {
-    await api.put('/item/update', editForm.value)
-    ElMessage.success('保存成功')
-    showEditDialog.value = false
-  } catch (e) {
-    ElMessage.success('保存成功（模拟）')
-    showEditDialog.value = false
-  }
+  ElMessage.warning('当前版本暂不支持编辑已发布物品')
 }
 
 const offlineItem = async (item) => {
@@ -313,52 +289,40 @@ const offlineItem = async (item) => {
       cancelButtonText: '取消',
       type: 'warning'
     })
-    await api.post(`/item/offline/${item.id}`)
-    const index = publishedItems.value.findIndex(i => i.id === item.id)
-    if (index > -1) {
-      offlineItems.value.unshift(publishedItems.value[index])
-      publishedItems.value.splice(index, 1)
-    }
+    await api.post(`/item/offline/${item.id}`, null, {
+      params: { userId: userStore.userInfo.id }
+    })
+    await loadMyItems()
     ElMessage.success('已下架')
   } catch (e) {
     if (e !== 'cancel') {
-      const index = publishedItems.value.findIndex(i => i.id === item.id)
-      if (index > -1) {
-        offlineItems.value.unshift(publishedItems.value[index])
-        publishedItems.value.splice(index, 1)
-      }
-      ElMessage.success('已下架（模拟）')
+      ElMessage.error('下架失败，请稍后重试')
     }
   }
 }
 
 const rePublish = async (item) => {
   try {
-    await api.post(`/item/publish/${item.id}`)
-    const index = offlineItems.value.findIndex(i => i.id === item.id)
-    if (index > -1) {
-      publishedItems.value.unshift(offlineItems.value[index])
-      offlineItems.value.splice(index, 1)
-    }
+    await api.post(`/item/publish/${item.id}`, null, {
+      params: { userId: userStore.userInfo.id }
+    })
+    await loadMyItems()
     ElMessage.success('已重新上架')
   } catch (e) {
-    const index = offlineItems.value.findIndex(i => i.id === item.id)
-    if (index > -1) {
-      publishedItems.value.unshift(offlineItems.value[index])
-      offlineItems.value.splice(index, 1)
-    }
-    ElMessage.success('已重新上架（模拟）')
+    ElMessage.error('重新上架失败，请稍后重试')
   }
 }
 
 onMounted(async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    assignMyItems([])
+    return
+  }
   try {
-    const res = await api.get('/item/my')
-    if (res.data.success) {
-      publishedItems.value = res.data.data
-    }
+    await loadMyItems()
   } catch (e) {
-    console.log('使用模拟数据')
+    assignMyItems([])
+    ElMessage.error('加载我的物品失败')
   }
 })
 </script>
