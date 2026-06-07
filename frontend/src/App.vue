@@ -15,22 +15,101 @@
               <el-menu-item index="/my">我的库房</el-menu-item>
             </el-menu>
           </nav>
-          <div class="user-area">
-            <el-button type="primary" @click="showLogin = true" v-if="!userStore.isLoggedIn">
-              登录
-            </el-button>
-            <el-dropdown v-else @command="handleUserCommand">
-              <span class="user-name">
-                <el-icon><User /></el-icon>
-                {{ userStore.userInfo.nickname || '用户' }}
-              </span>
-              <template #dropdown>
-                <el-dropdown-menu>
-                  <el-dropdown-item command="profile">个人中心</el-dropdown-item>
-                  <el-dropdown-item command="logout">退出登录</el-dropdown-item>
-                </el-dropdown-menu>
+          <div class="header-right">
+            <el-popover
+              v-if="userStore.isLoggedIn"
+              placement="bottom-end"
+              :width="380"
+              trigger="click"
+              popper-class="notification-popover"
+              @show="handlePopoverShow"
+            >
+              <template #reference>
+                <div class="notification-bell">
+                  <el-icon :size="22"><Bell /></el-icon>
+                  <el-badge
+                    v-if="notificationStore.unreadCount > 0"
+                    :value="notificationStore.unreadCount > 99 ? '99+' : notificationStore.unreadCount"
+                    :max="99"
+                    class="bell-badge"
+                  />
+                </div>
               </template>
-            </el-dropdown>
+
+              <div class="notification-panel">
+                <div class="notification-header">
+                  <span class="notification-title">消息通知</span>
+                  <el-button
+                    v-if="notificationStore.unreadCount > 0"
+                    type="text"
+                    size="small"
+                    @click="handleMarkAllRead"
+                  >
+                    全部标记已读
+                  </el-button>
+                </div>
+
+                <div class="notification-list" v-loading="notificationStore.loading">
+                  <div
+                    v-for="item in notificationStore.notifications"
+                    :key="item.id"
+                    class="notification-item"
+                    :class="{ unread: !item.read }"
+                  >
+                    <div
+                      class="notification-icon-wrap"
+                      :class="getIconClass(item.type)"
+                    >
+                      <el-icon :size="18">
+                        <component :is="getIconName(item.type)" />
+                      </el-icon>
+                    </div>
+                    <div class="notification-content" @click="handleNotificationClick(item)">
+                      <div class="notification-top">
+                        <span class="notification-item-title">{{ item.title }}</span>
+                        <span class="notification-time">{{ item.createTime }}</span>
+                      </div>
+                      <div class="notification-item-content">{{ item.content }}</div>
+                    </div>
+                    <div class="notification-actions">
+                      <el-button
+                        v-if="!item.read"
+                        type="text"
+                        size="small"
+                        @click.stop="handleMarkRead(item.id)"
+                      >
+                        标记已读
+                      </el-button>
+                      <span v-else class="read-mark">已读</span>
+                    </div>
+                    <span v-if="!item.read" class="unread-dot" />
+                  </div>
+                  <el-empty
+                    v-if="notificationStore.notifications.length === 0 && !notificationStore.loading"
+                    description="暂无消息"
+                    :image-size="60"
+                  />
+                </div>
+              </div>
+            </el-popover>
+
+            <div class="user-area">
+              <el-button type="primary" @click="showLogin = true" v-if="!userStore.isLoggedIn">
+                登录
+              </el-button>
+              <el-dropdown v-else @command="handleUserCommand">
+                <span class="user-name">
+                  <el-icon><User /></el-icon>
+                  {{ userStore.userInfo.nickname || '用户' }}
+                </span>
+                <template #dropdown>
+                  <el-dropdown-menu>
+                    <el-dropdown-item command="profile">个人中心</el-dropdown-item>
+                    <el-dropdown-item command="logout">退出登录</el-dropdown-item>
+                  </el-dropdown-menu>
+                </template>
+              </el-dropdown>
+            </div>
           </div>
         </div>
       </el-header>
@@ -60,16 +139,18 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useFavoriteStore } from '@/stores/favorite'
+import { useNotificationStore, NOTIFICATION_TYPES } from '@/stores/notification'
 import { ElMessage } from 'element-plus'
 
 const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const favoriteStore = useFavoriteStore()
+const notificationStore = useNotificationStore()
 
 const showLogin = ref(false)
 const loginForm = ref({
@@ -93,6 +174,7 @@ const handleLogin = async () => {
     showLogin.value = false
     ElMessage.success('登录成功')
     favoriteStore.loadFavorites()
+    notificationStore.loadNotifications()
   } else {
     ElMessage.error('登录失败，用户名或密码错误')
   }
@@ -102,6 +184,7 @@ const handleUserCommand = (command) => {
   if (command === 'logout') {
     userStore.logout()
     favoriteStore.loadFavorites()
+    notificationStore.clear()
     ElMessage.success('已退出登录')
     router.push('/')
   } else if (command === 'profile') {
@@ -109,9 +192,65 @@ const handleUserCommand = (command) => {
   }
 }
 
+const getIconName = (type) => {
+  const map = {
+    [NOTIFICATION_TYPES.NEW_OFFER]: 'Suitcase',
+    [NOTIFICATION_TYPES.OFFER_ACCEPTED]: 'CircleCheck',
+    [NOTIFICATION_TYPES.OFFER_REJECTED]: 'CircleClose'
+  }
+  return map[type] || 'Bell'
+}
+
+const getIconClass = (type) => {
+  const map = {
+    [NOTIFICATION_TYPES.NEW_OFFER]: 'icon-new',
+    [NOTIFICATION_TYPES.OFFER_ACCEPTED]: 'icon-accepted',
+    [NOTIFICATION_TYPES.OFFER_REJECTED]: 'icon-rejected'
+  }
+  return map[type] || ''
+}
+
+const handlePopoverShow = () => {
+  if (notificationStore.notifications.length === 0) {
+    notificationStore.loadNotifications()
+  }
+}
+
+const handleMarkRead = (id) => {
+  notificationStore.markAsRead(id)
+}
+
+const handleMarkAllRead = () => {
+  notificationStore.markAllAsRead()
+  ElMessage.success('已全部标记为已读')
+}
+
+const handleNotificationClick = (item) => {
+  if (!item.read) {
+    notificationStore.markAsRead(item.id)
+  }
+  if (item.itemId) {
+    router.push(`/detail/${item.itemId}`)
+  } else {
+    router.push('/offers')
+  }
+}
+
+watch(
+  () => userStore.isLoggedIn,
+  (isLoggedIn) => {
+    if (isLoggedIn) {
+      notificationStore.loadNotifications()
+    } else {
+      notificationStore.clear()
+    }
+  }
+)
+
 onMounted(() => {
   if (userStore.isLoggedIn) {
     favoriteStore.loadFavorites()
+    notificationStore.loadNotifications()
   }
 })
 </script>
@@ -167,6 +306,35 @@ onMounted(() => {
     }
   }
 
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 20px;
+  }
+
+  .notification-bell {
+    color: white;
+    cursor: pointer;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    transition: background 0.3s;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    .bell-badge {
+      :deep(.el-badge__content) {
+        border: none;
+      }
+    }
+  }
+
   .user-area {
     .user-name {
       color: white;
@@ -174,6 +342,148 @@ onMounted(() => {
       display: flex;
       align-items: center;
       gap: 5px;
+    }
+  }
+}
+
+.notification-popover {
+  padding: 0 !important;
+  border-radius: 12px !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
+
+  .notification-panel {
+    .notification-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid #ebeef5;
+
+      .notification-title {
+        font-size: 16px;
+        font-weight: 600;
+        color: #303133;
+      }
+    }
+
+    .notification-list {
+      max-height: 420px;
+      overflow-y: auto;
+
+      &::-webkit-scrollbar {
+        width: 6px;
+      }
+
+      &::-webkit-scrollbar-thumb {
+        background: #dcdfe6;
+        border-radius: 3px;
+      }
+    }
+
+    .notification-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 14px 18px;
+      border-bottom: 1px solid #f2f6fc;
+      position: relative;
+      transition: background 0.2s;
+
+      &:hover {
+        background: #fafbfc;
+      }
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &.unread {
+        background: #f0f9ff;
+
+        &:hover {
+          background: #e6f4ff;
+        }
+      }
+
+      .notification-icon-wrap {
+        flex-shrink: 0;
+        width: 36px;
+        height: 36px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+
+        &.icon-new {
+          background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+
+        &.icon-accepted {
+          background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+        }
+
+        &.icon-rejected {
+          background: linear-gradient(135deg, #eb3349 0%, #f45c43 100%);
+        }
+      }
+
+      .notification-content {
+        flex: 1;
+        min-width: 0;
+        cursor: pointer;
+
+        .notification-top {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          margin-bottom: 4px;
+
+          .notification-item-title {
+            font-size: 14px;
+            font-weight: 500;
+            color: #303133;
+          }
+
+          .notification-time {
+            font-size: 12px;
+            color: #909399;
+            flex-shrink: 0;
+            margin-left: 8px;
+          }
+        }
+
+        .notification-item-content {
+          font-size: 13px;
+          color: #606266;
+          line-height: 1.5;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+      }
+
+      .notification-actions {
+        flex-shrink: 0;
+        padding-left: 8px;
+
+        .read-mark {
+          font-size: 12px;
+          color: #c0c4cc;
+        }
+      }
+
+      .unread-dot {
+        position: absolute;
+        top: 18px;
+        right: 14px;
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #f56c6c;
+      }
     }
   }
 }
