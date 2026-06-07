@@ -92,9 +92,9 @@ CREATE TABLE IF NOT EXISTS notification (
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT DEFAULT 0,
-    INDEX idx_user_id(user_id),
-    INDEX idx_read_flag(read_flag),
-    INDEX idx_create_time(create_time)
+    INDEX idx_notification_user_id(user_id),
+    INDEX idx_notification_read_flag(read_flag),
+    INDEX idx_notification_create_time(create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 INSERT IGNORE INTO category (id, name, icon, sort_order) VALUES

@@ -4,88 +4,102 @@
 
     <el-tabs v-model="activeTab" class="offer-tabs">
       <el-tab-pane label="收到的邀约" name="received">
-        <el-card class="offer-card" v-for="offer in receivedOffers" :key="offer.id" @click="goToDetail(offer.id)">
-          <div class="offer-content">
-            <div class="offer-items">
-              <div class="offer-item">
-                <img :src="offer.myItem.images?.[0]" class="item-thumb" />
-                <div class="item-info">
-                  <div class="item-title">{{ offer.myItem.title }}</div>
-                  <div class="item-label">我的物品</div>
+        <div
+          class="offer-card-wrapper"
+          v-for="offer in receivedOffers"
+          :key="offer.id"
+          @click="goToDetail(offer.id)"
+        >
+          <el-card class="offer-card">
+            <div class="offer-content">
+              <div class="offer-items">
+                <div class="offer-item">
+                  <img :src="offer.myItem.images?.[0]" class="item-thumb" />
+                  <div class="item-info">
+                    <div class="item-title">{{ offer.myItem.title }}</div>
+                    <div class="item-label">我的物品</div>
+                  </div>
+                </div>
+                <div class="offer-arrow">
+                  <el-icon size="24"><Switch /></el-icon>
+                </div>
+                <div class="offer-item">
+                  <img :src="offer.targetItem.images?.[0]" class="item-thumb" />
+                  <div class="item-info">
+                    <div class="item-title">{{ offer.targetItem.title }}</div>
+                    <div class="item-label">对方物品</div>
+                  </div>
                 </div>
               </div>
-              <div class="offer-arrow">
-                <el-icon size="24"><Switch /></el-icon>
-              </div>
-              <div class="offer-item">
-                <img :src="offer.targetItem.images?.[0]" class="item-thumb" />
-                <div class="item-info">
-                  <div class="item-title">{{ offer.targetItem.title }}</div>
-                  <div class="item-label">对方物品</div>
+              <div class="offer-detail">
+                <div class="offer-from">
+                  <el-avatar :size="32">{{ offer.fromUser?.nickname?.[0] }}</el-avatar>
+                  <span>{{ offer.fromUser?.nickname }}</span>
+                  <span class="offer-time">{{ offer.createTime }}</span>
+                </div>
+                <div class="offer-message" v-if="offer.message">
+                  {{ offer.message }}
+                </div>
+                <div class="offer-actions" v-if="offer.status === 'pending'">
+                  <el-button type="success" size="small" @click.stop="acceptOffer(offer)">同意</el-button>
+                  <el-button type="danger" size="small" @click.stop="rejectOffer(offer)">驳回</el-button>
+                </div>
+                <div class="offer-status" v-else>
+                  <el-tag :type="offer.status === 'accepted' ? 'success' : 'danger'">
+                    {{ offer.status === 'accepted' ? '已同意' : '已驳回' }}
+                  </el-tag>
                 </div>
               </div>
             </div>
-            <div class="offer-detail">
-              <div class="offer-from">
-                <el-avatar :size="32">{{ offer.fromUser?.nickname?.[0] }}</el-avatar>
-                <span>{{ offer.fromUser?.nickname }}</span>
-                <span class="offer-time">{{ offer.createTime }}</span>
-              </div>
-              <div class="offer-message" v-if="offer.message">
-                {{ offer.message }}
-              </div>
-              <div class="offer-actions" v-if="offer.status === 'pending'">
-                <el-button type="success" size="small" @click="acceptOffer(offer)">同意</el-button>
-                <el-button type="danger" size="small" @click="rejectOffer(offer)">驳回</el-button>
-              </div>
-              <div class="offer-status" v-else>
-                <el-tag :type="offer.status === 'accepted' ? 'success' : 'danger'">
-                  {{ offer.status === 'accepted' ? '已同意' : '已驳回' }}
-                </el-tag>
-              </div>
-            </div>
-          </div>
-        </el-card>
+          </el-card>
+        </div>
         <el-empty v-if="receivedOffers.length === 0" description="暂无收到的邀约" />
       </el-tab-pane>
 
       <el-tab-pane label="发出的邀约" name="sent">
-        <el-card class="offer-card" v-for="offer in sentOffers" :key="offer.id" @click="goToDetail(offer.id)">
-          <div class="offer-content">
-            <div class="offer-items">
-              <div class="offer-item">
-                <img :src="offer.myItem.images?.[0]" class="item-thumb" />
-                <div class="item-info">
-                  <div class="item-title">{{ offer.myItem.title }}</div>
-                  <div class="item-label">我的物品</div>
+        <div
+          class="offer-card-wrapper"
+          v-for="offer in sentOffers"
+          :key="offer.id"
+          @click="goToDetail(offer.id)"
+        >
+          <el-card class="offer-card">
+            <div class="offer-content">
+              <div class="offer-items">
+                <div class="offer-item">
+                  <img :src="offer.myItem.images?.[0]" class="item-thumb" />
+                  <div class="item-info">
+                    <div class="item-title">{{ offer.myItem.title }}</div>
+                    <div class="item-label">我的物品</div>
+                  </div>
+                </div>
+                <div class="offer-arrow">
+                  <el-icon size="24"><Switch /></el-icon>
+                </div>
+                <div class="offer-item">
+                  <img :src="offer.targetItem.images?.[0]" class="item-thumb" />
+                  <div class="item-info">
+                    <div class="item-title">{{ offer.targetItem.title }}</div>
+                    <div class="item-label">对方物品</div>
+                  </div>
                 </div>
               </div>
-              <div class="offer-arrow">
-                <el-icon size="24"><Switch /></el-icon>
-              </div>
-              <div class="offer-item">
-                <img :src="offer.targetItem.images?.[0]" class="item-thumb" />
-                <div class="item-info">
-                  <div class="item-title">{{ offer.targetItem.title }}</div>
-                  <div class="item-label">对方物品</div>
+              <div class="offer-detail">
+                <div class="offer-from">
+                  <span class="offer-time">发送于 {{ offer.createTime }}</span>
+                </div>
+                <div class="offer-message" v-if="offer.message">
+                  {{ offer.message }}
+                </div>
+                <div class="offer-status">
+                  <el-tag :type="getStatusType(offer.status)">
+                    {{ getStatusText(offer.status) }}
+                  </el-tag>
                 </div>
               </div>
             </div>
-            <div class="offer-detail">
-              <div class="offer-from">
-                <span class="offer-time">发送于 {{ offer.createTime }}</span>
-              </div>
-              <div class="offer-message" v-if="offer.message">
-                {{ offer.message }}
-              </div>
-              <div class="offer-status">
-                <el-tag :type="getStatusType(offer.status)">
-                  {{ getStatusText(offer.status) }}
-                </el-tag>
-              </div>
-            </div>
-          </div>
-        </el-card>
+          </el-card>
+        </div>
         <el-empty v-if="sentOffers.length === 0" description="暂无发出的邀约" />
       </el-tab-pane>
     </el-tabs>
@@ -193,87 +207,90 @@ onMounted(() => {
   }
 }
 
-.offer-card {
+.offer-card-wrapper {
   margin-bottom: 16px;
   cursor: pointer;
-  transition: transform 0.2s, box-shadow 0.2s;
 
-  &:hover {
-    transform: translateY(-2px);
-  }
+  .offer-card {
+    transition: transform 0.2s, box-shadow 0.2s;
 
-  .offer-content {
-    display: flex;
-    gap: 30px;
-  }
+    &:hover {
+      transform: translateY(-2px);
+    }
 
-  .offer-items {
-    display: flex;
-    align-items: center;
-    gap: 20px;
+    .offer-content {
+      display: flex;
+      gap: 30px;
+    }
 
-    .offer-item {
+    .offer-items {
       display: flex;
       align-items: center;
-      gap: 12px;
+      gap: 20px;
 
-      .item-thumb {
-        width: 80px;
-        height: 80px;
-        border-radius: 8px;
-        object-fit: cover;
-      }
+      .offer-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
 
-      .item-info {
-        .item-title {
-          font-size: 15px;
-          font-weight: 500;
-          color: #303133;
-          margin-bottom: 4px;
+        .item-thumb {
+          width: 80px;
+          height: 80px;
+          border-radius: 8px;
+          object-fit: cover;
         }
 
-        .item-label {
-          font-size: 12px;
+        .item-info {
+          .item-title {
+            font-size: 15px;
+            font-weight: 500;
+            color: #303133;
+            margin-bottom: 4px;
+          }
+
+          .item-label {
+            font-size: 12px;
+            color: #909399;
+          }
+        }
+      }
+
+      .offer-arrow {
+        color: #409eff;
+      }
+    }
+
+    .offer-detail {
+      flex: 1;
+
+      .offer-from {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 12px;
+        font-size: 14px;
+        color: #606266;
+
+        .offer-time {
           color: #909399;
+          font-size: 13px;
+          margin-left: auto;
         }
       }
-    }
 
-    .offer-arrow {
-      color: #409eff;
-    }
-  }
-
-  .offer-detail {
-    flex: 1;
-
-    .offer-from {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 12px;
-      font-size: 14px;
-      color: #606266;
-
-      .offer-time {
-        color: #909399;
-        font-size: 13px;
-        margin-left: auto;
+      .offer-message {
+        padding: 12px;
+        background: #f5f7fa;
+        border-radius: 6px;
+        font-size: 14px;
+        color: #606266;
+        margin-bottom: 12px;
       }
-    }
 
-    .offer-message {
-      padding: 12px;
-      background: #f5f7fa;
-      border-radius: 6px;
-      font-size: 14px;
-      color: #606266;
-      margin-bottom: 12px;
-    }
-
-    .offer-actions {
-      display: flex;
-      gap: 12px;
+      .offer-actions {
+        display: flex;
+        gap: 12px;
+      }
     }
   }
 }
