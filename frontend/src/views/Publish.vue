@@ -1,6 +1,6 @@
 <template>
   <div class="page-container">
-    <h1 class="page-title">发布闲置物品</h1>
+    <h1 class="page-title">{{ editingDraftId ? '编辑草稿' : '发布闲置物品' }}</h1>
 
     <div class="form-container">
       <el-form 
@@ -69,7 +69,10 @@
 
         <el-form-item>
           <el-button type="primary" size="large" @click="handleSubmit" :loading="submitting">
-            发布物品
+            {{ editingDraftId ? '立即发布' : '发布物品' }}
+          </el-button>
+          <el-button size="large" @click="handleSaveDraft" :loading="savingDraft">
+            保存草稿
           </el-button>
           <el-button size="large" @click="handleCancel">取消</el-button>
         </el-form-item>
@@ -79,17 +82,23 @@
 </template>
 
 <script setup>
-import { ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { compressImages } from '@/utils/imageCompressor'
 import api from '@/utils/api'
+import { useDraftStore } from '@/stores/draft'
 
 const router = useRouter()
+const route = useRoute()
+const draftStore = useDraftStore()
 const formRef = ref(null)
 const uploadRef = ref(null)
 const submitting = ref(false)
+const savingDraft = ref(false)
 const fileList = ref([])
+const editingDraftId = ref(null)
+let autoSaveTimer = null
 
 const categories = ref([
   { id: 1, name: '数码家电' },
@@ -117,6 +126,78 @@ const rules = {
   images: [{ required: true, message: '请上传至少一张图片', trigger: 'change' }]
 }
 
+const base64ToFile = (base64, filename = 'image.png') => {
+  const arr = base64.split(',')
+  const mime = arr[0].match(/:(.*?);/)[1]
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new File([u8arr], filename, { type: mime })
+}
+
+const loadDraft = (draftId) => {
+  const draft = draftStore.getDraft(draftId)
+  if (draft) {
+    editingDraftId.value = draft.id
+    form.value.title = draft.title || ''
+    form.value.categoryId = draft.categoryId || null
+    form.value.condition = draft.condition || '九成新'
+    form.value.description = draft.description || ''
+    form.value.expectedSwap = draft.expectedSwap || ''
+
+    if (draft.images && draft.images.length > 0) {
+      fileList.value = draft.images.map((url, index) => ({
+        name: `image_${index}`,
+        url: url,
+        raw: base64ToFile(url, `image_${index}.png`)
+      }))
+      form.value.images = draft.images.map(url => base64ToFile(url))
+    }
+  }
+}
+
+const triggerAutoSave = () => {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer)
+  }
+  autoSaveTimer = setTimeout(async () => {
+    const hasContent = form.value.title || form.value.description || form.value.expectedSwap || (form.value.images && form.value.images.length > 0)
+    if (hasContent) {
+      const draftData = {
+        ...form.value,
+        id: editingDraftId.value
+      }
+      try {
+        const saved = await draftStore.saveDraft(draftData)
+        if (!editingDraftId.value) {
+          editingDraftId.value = saved.id
+        }
+      } catch (e) {
+        console.error('自动保存草稿失败', e)
+      }
+    }
+  }, 2000)
+}
+
+watch(
+  () => [form.value.title, form.value.categoryId, form.value.condition, form.value.description, form.value.expectedSwap],
+  () => {
+    triggerAutoSave()
+  },
+  { deep: true }
+)
+
+watch(
+  () => form.value.images,
+  () => {
+    triggerAutoSave()
+  },
+  { deep: true }
+)
+
 const beforeUpload = (file) => {
   const isImage = file.type.startsWith('image/')
   if (!isImage) {
@@ -141,6 +222,7 @@ const handleFileChange = async (file, list) => {
   if (formRef.value) {
     formRef.value.validateField('images')
   }
+  triggerAutoSave()
 }
 
 const handleFileRemove = (file, list) => {
@@ -148,6 +230,26 @@ const handleFileRemove = (file, list) => {
   form.value.images = list.map(f => f.raw || f.url)
   if (formRef.value) {
     formRef.value.validateField('images')
+  }
+  triggerAutoSave()
+}
+
+const handleSaveDraft = async () => {
+  savingDraft.value = true
+  try {
+    const draftData = {
+      ...form.value,
+      id: editingDraftId.value
+    }
+    const saved = await draftStore.saveDraft(draftData)
+    if (!editingDraftId.value) {
+      editingDraftId.value = saved.id
+    }
+    ElMessage.success('草稿已保存')
+  } catch (e) {
+    ElMessage.error('保存草稿失败，请重试')
+  } finally {
+    savingDraft.value = false
   }
 }
 
@@ -176,10 +278,16 @@ const handleSubmit = async () => {
         })
 
         if (res.data.success) {
+          if (editingDraftId.value) {
+            draftStore.deleteDraft(editingDraftId.value)
+          }
           ElMessage.success('发布成功！')
           router.push('/my')
         }
       } catch (e) {
+        if (editingDraftId.value) {
+          draftStore.deleteDraft(editingDraftId.value)
+        }
         ElMessage.success('发布成功！（模拟）')
         router.push('/my')
       } finally {
@@ -192,6 +300,19 @@ const handleSubmit = async () => {
 const handleCancel = () => {
   router.back()
 }
+
+onMounted(() => {
+  const draftId = route.query.draftId
+  if (draftId) {
+    loadDraft(draftId)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (autoSaveTimer) {
+    clearTimeout(autoSaveTimer)
+  }
+})
 </script>
 
 <style lang="scss" scoped>

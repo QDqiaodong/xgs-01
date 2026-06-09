@@ -3,6 +3,43 @@
     <h1 class="page-title">我的库房</h1>
 
     <el-tabs v-model="activeTab" class="my-tabs">
+      <el-tab-pane label="草稿箱" name="drafts">
+        <div class="card-grid">
+          <div 
+            v-for="draft in draftList" 
+            :key="draft.id" 
+            class="item-card draft"
+          >
+            <div class="draft-badge">草稿</div>
+            <img :src="draft.images?.[0] || 'https://picsum.photos/400/300'" class="item-image" />
+            <div class="item-content">
+              <div class="item-title">{{ draft.title || '未命名草稿' }}</div>
+              <span class="item-category">{{ getCategoryName(draft) }}</span>
+              <div class="item-desc">{{ draft.description || '暂无描述' }}</div>
+              <div class="item-footer">
+                <span class="item-condition">{{ draft.condition }}</span>
+                <span class="item-time draft-time">更新于 {{ draftStore.formatDraftTime(draft.updatedAt) }}</span>
+              </div>
+              <div class="draft-actions">
+                <el-button size="small" type="primary" @click="editDraft(draft)">
+                  <el-icon><Edit /></el-icon>
+                  继续编辑
+                </el-button>
+                <el-button size="small" type="danger" plain @click="deleteDraft(draft)">
+                  <el-icon><Delete /></el-icon>
+                  删除
+                </el-button>
+                <el-button size="small" type="success" @click="publishDraft(draft)">
+                  <el-icon><Promotion /></el-icon>
+                  立即发布
+                </el-button>
+              </div>
+            </div>
+          </div>
+        </div>
+        <el-empty v-if="draftList.length === 0" description="暂无草稿" />
+      </el-tab-pane>
+
       <el-tab-pane label="已发布" name="published">
         <div class="card-grid">
           <div 
@@ -169,20 +206,51 @@ import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useHistoryStore } from '@/stores/history'
 import { useUserStore } from '@/stores/user'
+import { useDraftStore } from '@/stores/draft'
 
 const router = useRouter()
 const favoriteStore = useFavoriteStore()
 const historyStore = useHistoryStore()
 const userStore = useUserStore()
+const draftStore = useDraftStore()
 
-const activeTab = ref('published')
+const activeTab = ref('drafts')
 const showEditDialog = ref(false)
 const editForm = ref({})
 const favoriteLoading = ref(false)
 
 const favoriteItems = ref([])
 const historyList = computed(() => historyStore.historyList)
+const draftList = computed(() => draftStore.draftList)
 const formatBrowseTime = (timestamp) => historyStore.formatBrowseTime(timestamp)
+
+const editDraft = (draft) => {
+  router.push({ path: '/publish', query: { draftId: draft.id } })
+}
+
+const deleteDraft = async (draft) => {
+  try {
+    await ElMessageBox.confirm('确定要删除该草稿吗？此操作不可恢复。', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    draftStore.deleteDraft(draft.id)
+  } catch (e) {
+  }
+}
+
+const publishDraft = async (draft) => {
+  try {
+    await ElMessageBox.confirm('确定要立即发布该草稿吗？发布后草稿将被删除。', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'info'
+    })
+    router.push({ path: '/publish', query: { draftId: draft.id } })
+  } catch (e) {
+  }
+}
 
 const removeFromHistory = async (item) => {
   try {
@@ -337,6 +405,13 @@ onMounted(async () => {
 .item-card {
   position: relative;
 
+  &.draft {
+    .item-image {
+      border: 2px dashed #e6a23c;
+      border-radius: 8px 8px 0 0;
+    }
+  }
+
   &.completed .item-image {
     filter: grayscale(50%);
   }
@@ -345,6 +420,7 @@ onMounted(async () => {
     filter: grayscale(80%);
   }
 
+  .draft-badge,
   .completed-badge,
   .offline-badge {
     position: absolute;
@@ -354,6 +430,11 @@ onMounted(async () => {
     border-radius: 4px;
     font-size: 12px;
     z-index: 1;
+  }
+
+  .draft-badge {
+    background: #e6a23c;
+    color: white;
   }
 
   .completed-badge {
@@ -399,6 +480,25 @@ onMounted(async () => {
   .item-actions {
     display: flex;
     gap: 8px;
+  }
+
+  .draft-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid #f0f0f0;
+
+    .el-button {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+  }
+
+  .draft-time {
+    color: #e6a23c;
+    font-size: 12px;
   }
 }
 
