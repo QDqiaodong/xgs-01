@@ -39,6 +39,28 @@ public class SwapOfferService {
             throw new RuntimeException("物品不存在");
         }
 
+        if (!fromItem.getUserId().equals(fromUserId)) {
+            throw new RuntimeException("您不是该物品的所有者，无法使用该物品发起邀约");
+        }
+
+        if (toItem.getUserId().equals(fromUserId)) {
+            throw new RuntimeException("不能对自己的物品发起互换邀约");
+        }
+
+        if (!"published".equals(fromItem.getStatus())) {
+            throw new RuntimeException("您的物品已下架或已成交，无法发起互换邀约");
+        }
+
+        if (!"published".equals(toItem.getStatus())) {
+            if ("offline".equals(toItem.getStatus())) {
+                throw new RuntimeException("对方物品已下架，无法发起互换邀约");
+            } else if ("completed".equals(toItem.getStatus())) {
+                throw new RuntimeException("对方物品已成交，无法发起互换邀约");
+            } else {
+                throw new RuntimeException("对方物品当前不可互换");
+            }
+        }
+
         SwapOffer offer = new SwapOffer();
         offer.setFromUserId(fromUserId);
         offer.setToUserId(toItem.getUserId());

@@ -79,9 +79,14 @@
               </div>
 
               <div class="action-buttons">
-                <el-button type="primary" size="large" @click="showOfferDialog = true">
+                <el-button 
+                  type="primary" 
+                  size="large" 
+                  :disabled="!canOffer"
+                  @click="handleOpenOfferDialog"
+                >
                   <el-icon><Switch /></el-icon>
-                  发起互换邀约
+                  {{ offerButtonText }}
                 </el-button>
                 <el-button size="large">
                   <el-icon><Message /></el-icon>
@@ -164,6 +169,51 @@ const myItems = ref([])
 
 const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
 
+const canOffer = computed(() => {
+  if (!item.value) return false
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) return false
+  if (item.value.userId === userStore.userInfo.id) return false
+  return item.value.status === 'published'
+})
+
+const offerButtonText = computed(() => {
+  if (!item.value) return '发起互换邀约'
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) return '请先登录'
+  if (item.value.userId === userStore.userInfo.id) return '不能互换自己的物品'
+  if (item.value.status === 'offline') return '物品已下架'
+  if (item.value.status === 'completed') return '物品已成交'
+  return '发起互换邀约'
+})
+
+const handleOpenOfferDialog = () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  if (!item.value) {
+    ElMessage.warning('物品信息加载失败')
+    return
+  }
+  if (item.value.userId === userStore.userInfo.id) {
+    ElMessage.warning('不能对自己的物品发起互换邀约')
+    return
+  }
+  if (item.value.status === 'offline') {
+    ElMessage.warning('物品已下架，无法发起互换邀约')
+    return
+  }
+  if (item.value.status === 'completed') {
+    ElMessage.warning('物品已成交，无法发起互换邀约')
+    return
+  }
+  if (item.value.status !== 'published') {
+    ElMessage.warning('该物品当前不可互换')
+    return
+  }
+  loadMyItems()
+  showOfferDialog.value = true
+}
+
 const handleThumbnailClick = (img, index) => {
   if (failedThumbnailIndices.value.has(index)) {
     currentImage.value = PLACEHOLDER_IMAGE
@@ -245,6 +295,35 @@ const submitOffer = async () => {
   }
   if (!offerForm.value.myItemId) {
     ElMessage.warning('请选择要交换的物品')
+    return
+  }
+  if (!item.value) {
+    ElMessage.warning('物品信息加载失败')
+    return
+  }
+  if (item.value.userId === userStore.userInfo.id) {
+    ElMessage.warning('不能对自己的物品发起互换邀约')
+    return
+  }
+  if (item.value.status !== 'published') {
+    if (item.value.status === 'offline') {
+      ElMessage.warning('对方物品已下架，无法发起互换邀约')
+    } else if (item.value.status === 'completed') {
+      ElMessage.warning('对方物品已成交，无法发起互换邀约')
+    } else {
+      ElMessage.warning('对方物品当前不可互换')
+    }
+    return
+  }
+  const selectedMyItem = myItems.value.find(i => Number(i.id) === Number(offerForm.value.myItemId))
+  if (selectedMyItem && selectedMyItem.status !== 'published') {
+    if (selectedMyItem.status === 'offline') {
+      ElMessage.warning('您选择的物品已下架，无法发起互换邀约')
+    } else if (selectedMyItem.status === 'completed') {
+      ElMessage.warning('您选择的物品已成交，无法发起互换邀约')
+    } else {
+      ElMessage.warning('您选择的物品当前不可互换')
+    }
     return
   }
   try {
