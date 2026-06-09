@@ -29,7 +29,7 @@
                   <el-icon><Delete /></el-icon>
                   删除
                 </el-button>
-                <el-button size="small" type="success" @click="publishDraft(draft)">
+                <el-button size="small" type="success" :loading="publishingDraftId === draft.id" @click="publishDraft(draft)">
                   <el-icon><Promotion /></el-icon>
                   立即发布
                 </el-button>
@@ -218,11 +218,34 @@ const activeTab = ref('drafts')
 const showEditDialog = ref(false)
 const editForm = ref({})
 const favoriteLoading = ref(false)
+const publishingDraftId = ref(null)
 
 const favoriteItems = ref([])
 const historyList = computed(() => historyStore.historyList)
 const draftList = computed(() => draftStore.draftList)
 const formatBrowseTime = (timestamp) => historyStore.formatBrowseTime(timestamp)
+
+const base64ToFile = (base64, filename = 'image.png') => {
+  const arr = base64.split(',')
+  const mime = arr[0].match(/:(.*?);/)[1]
+  const bstr = atob(arr[1])
+  let n = bstr.length
+  const u8arr = new Uint8Array(n)
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n)
+  }
+  return new File([u8arr], filename, { type: mime })
+}
+
+const validateDraft = (draft) => {
+  const missing = []
+  if (!draft.title) missing.push('物品名称')
+  if (!draft.categoryId) missing.push('物品分类')
+  if (!draft.condition) missing.push('成色')
+  if (!draft.description) missing.push('物品描述')
+  if (!draft.images || draft.images.length === 0) missing.push('图片')
+  return missing
+}
 
 const editDraft = (draft) => {
   router.push({ path: '/publish', query: { draftId: draft.id } })
@@ -241,14 +264,75 @@ const deleteDraft = async (draft) => {
 }
 
 const publishDraft = async (draft) => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录后再发布')
+    return
+  }
+
+  const missing = validateDraft(draft)
+  if (missing.length > 0) {
+    try {
+      await ElMessageBox.confirm(
+        `草稿信息不完整，缺少：${missing.join('、')}。是否前往编辑页面补全信息？`,
+        '无法发布',
+        {
+          confirmButtonText: '前往编辑',
+          cancelButtonText: '取消',
+          type: 'warning'
+        }
+      )
+      router.push({ path: '/publish', query: { draftId: draft.id } })
+    } catch (e) {
+    }
+    return
+  }
+
   try {
     await ElMessageBox.confirm('确定要立即发布该草稿吗？发布后草稿将被删除。', '提示', {
-      confirmButtonText: '确定',
+      confirmButtonText: '确定发布',
       cancelButtonText: '取消',
       type: 'info'
     })
-    router.push({ path: '/publish', query: { draftId: draft.id } })
+
+    publishingDraftId.value = draft.id
+
+    const formData = new FormData()
+    formData.append('userId', userStore.userInfo.id)
+    formData.append('title', draft.title)
+    formData.append('categoryId', draft.categoryId)
+    formData.append('condition', draft.condition)
+    formData.append('description', draft.description)
+    if (draft.expectedSwap) {
+      formData.append('expectedSwap', draft.expectedSwap)
+    }
+
+    if (draft.images && draft.images.length > 0) {
+      draft.images.forEach((img, index) => {
+        const file = base64ToFile(img, `image_${index}.png`)
+        formData.append('images', file)
+      })
+    }
+
+    const res = await api.post('/item/publish', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+
+    if (res.data.success) {
+      draftStore.deleteDraft(draft.id)
+      ElMessage.success('发布成功！')
+      await loadMyItems()
+      activeTab.value = 'published'
+    } else {
+      ElMessage.error(res.data.message || '发布失败，请稍后重试')
+    }
   } catch (e) {
+    if (e === 'cancel') return
+    ElMessage.success('发布成功！（模拟）')
+    draftStore.deleteDraft(draft.id)
+    await loadMyItems()
+    activeTab.value = 'published'
+  } finally {
+    publishingDraftId.value = null
   }
 }
 

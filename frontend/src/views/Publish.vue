@@ -88,10 +88,12 @@ import { ElMessage } from 'element-plus'
 import { compressImages } from '@/utils/imageCompressor'
 import api from '@/utils/api'
 import { useDraftStore } from '@/stores/draft'
+import { useUserStore } from '@/stores/user'
 
 const router = useRouter()
 const route = useRoute()
 const draftStore = useDraftStore()
+const userStore = useUserStore()
 const formRef = ref(null)
 const uploadRef = ref(null)
 const submitting = ref(false)
@@ -138,10 +140,18 @@ const base64ToFile = (base64, filename = 'image.png') => {
   return new File([u8arr], filename, { type: mime })
 }
 
+const setDraftId = (id) => {
+  editingDraftId.value = id
+  draftStore.saveCurrentDraftId(id)
+  if (id && route.query.draftId !== id) {
+    router.replace({ path: '/publish', query: { draftId: id } })
+  }
+}
+
 const loadDraft = (draftId) => {
   const draft = draftStore.getDraft(draftId)
   if (draft) {
-    editingDraftId.value = draft.id
+    setDraftId(draft.id)
     form.value.title = draft.title || ''
     form.value.categoryId = draft.categoryId || null
     form.value.condition = draft.condition || '九成新'
@@ -173,7 +183,7 @@ const triggerAutoSave = () => {
       try {
         const saved = await draftStore.saveDraft(draftData)
         if (!editingDraftId.value) {
-          editingDraftId.value = saved.id
+          setDraftId(saved.id)
         }
       } catch (e) {
         console.error('自动保存草稿失败', e)
@@ -243,7 +253,7 @@ const handleSaveDraft = async () => {
     }
     const saved = await draftStore.saveDraft(draftData)
     if (!editingDraftId.value) {
-      editingDraftId.value = saved.id
+      setDraftId(saved.id)
     }
     ElMessage.success('草稿已保存')
   } catch (e) {
@@ -258,9 +268,14 @@ const handleSubmit = async () => {
   
   await formRef.value.validate(async (valid) => {
     if (valid) {
+      if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+        ElMessage.warning('请先登录后再发布')
+        return
+      }
       submitting.value = true
       try {
         const formData = new FormData()
+        formData.append('userId', userStore.userInfo.id)
         formData.append('title', form.value.title)
         formData.append('categoryId', form.value.categoryId)
         formData.append('condition', form.value.condition)
@@ -302,7 +317,7 @@ const handleCancel = () => {
 }
 
 onMounted(() => {
-  const draftId = route.query.draftId
+  const draftId = route.query.draftId || draftStore.currentDraftId
   if (draftId) {
     loadDraft(draftId)
   }

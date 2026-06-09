@@ -4,6 +4,7 @@ import { ElMessage } from 'element-plus'
 import { useUserStore } from '@/stores/user'
 
 const DRAFT_KEY_PREFIX = 'itemDrafts'
+const CURRENT_DRAFT_KEY_PREFIX = 'currentEditingDraft'
 
 const getStorageKey = (userId) => {
   if (userId) {
@@ -12,12 +13,28 @@ const getStorageKey = (userId) => {
   return `${DRAFT_KEY_PREFIX}_guest`
 }
 
+const getCurrentDraftKey = (userId) => {
+  if (userId) {
+    return `${CURRENT_DRAFT_KEY_PREFIX}_${userId}`
+  }
+  return `${CURRENT_DRAFT_KEY_PREFIX}_guest`
+}
+
 const loadFromStorage = (userId) => {
   const key = getStorageKey(userId)
   try {
     return JSON.parse(localStorage.getItem(key) || '[]')
   } catch (e) {
     return []
+  }
+}
+
+const loadCurrentDraftId = (userId) => {
+  const key = getCurrentDraftKey(userId)
+  try {
+    return localStorage.getItem(key) || null
+  } catch (e) {
+    return null
   }
 }
 
@@ -33,12 +50,14 @@ const fileToBase64 = (file) => {
 export const useDraftStore = defineStore('draft', () => {
   const userStore = useUserStore()
   const draftList = ref(loadFromStorage(userStore.userInfo?.id))
+  const currentDraftId = ref(loadCurrentDraftId(userStore.userInfo?.id))
 
   watch(
     () => userStore.userInfo?.id,
     (newUserId, oldUserId) => {
       if (newUserId !== oldUserId) {
         draftList.value = loadFromStorage(newUserId)
+        currentDraftId.value = loadCurrentDraftId(newUserId)
       }
     }
   )
@@ -47,8 +66,21 @@ export const useDraftStore = defineStore('draft', () => {
     return getStorageKey(userStore.userInfo?.id)
   }
 
+  const getCurrentDraftStorageKey = () => {
+    return getCurrentDraftKey(userStore.userInfo?.id)
+  }
+
   const saveToStorage = () => {
     localStorage.setItem(getCurrentStorageKey(), JSON.stringify(draftList.value))
+  }
+
+  const saveCurrentDraftId = (id) => {
+    if (id) {
+      localStorage.setItem(getCurrentDraftStorageKey(), id)
+    } else {
+      localStorage.removeItem(getCurrentDraftStorageKey())
+    }
+    currentDraftId.value = id
   }
 
   const saveDraft = async (draftData) => {
@@ -94,11 +126,19 @@ export const useDraftStore = defineStore('draft', () => {
     return draftList.value.find(d => d.id === id) || null
   }
 
+  const getCurrentDraft = () => {
+    if (!currentDraftId.value) return null
+    return getDraft(currentDraftId.value)
+  }
+
   const deleteDraft = (id) => {
     const index = draftList.value.findIndex(d => d.id === id)
     if (index > -1) {
       draftList.value.splice(index, 1)
       saveToStorage()
+      if (currentDraftId.value === id) {
+        saveCurrentDraftId(null)
+      }
       ElMessage.success('草稿已删除')
       return true
     }
@@ -108,6 +148,7 @@ export const useDraftStore = defineStore('draft', () => {
   const clearDrafts = () => {
     draftList.value = []
     saveToStorage()
+    saveCurrentDraftId(null)
     ElMessage.success('草稿已清空')
   }
 
@@ -129,8 +170,11 @@ export const useDraftStore = defineStore('draft', () => {
 
   return {
     draftList,
+    currentDraftId,
     saveDraft,
     getDraft,
+    getCurrentDraft,
+    saveCurrentDraftId,
     deleteDraft,
     clearDrafts,
     formatDraftTime
