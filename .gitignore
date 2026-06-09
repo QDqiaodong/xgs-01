@@ -76,6 +76,7 @@ docker/mysql/data/
 docker/mysql/logs/
 data/mysql/
 data/redis/
+data/uploads/
 
 # ====================== 9、本地打包发布产物 ======================
 release/*.tar.gz
