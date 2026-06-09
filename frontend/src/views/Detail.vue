@@ -9,18 +9,29 @@
             <el-image 
               class="main-image"
               :src="currentImage" 
-              :preview-src-list="item.images || []"
+              :preview-src-list="previewImageList"
               fit="cover"
-            />
+              :preview-teleported="true"
+            >
+              <template #error>
+                <div class="image-slot">
+                  <el-icon :size="48"><Picture /></el-icon>
+                  <span>图片加载失败</span>
+                </div>
+              </template>
+            </el-image>
             <div class="image-thumbnails">
               <div 
                 v-for="(img, index) in item.images" 
                 :key="index"
                 class="thumbnail"
                 :class="{ active: currentImage === img }"
-                @click="currentImage = img"
+                @click="handleThumbnailClick(img, index)"
               >
-                <img :src="img" />
+                <img 
+                  :src="img" 
+                  @error="handleThumbnailError($event, index)"
+                />
               </div>
             </div>
           </el-col>
@@ -28,7 +39,7 @@
           <el-col :span="10">
             <div class="item-info">
               <div class="title-row">
-                <h1 class="item-title">{{ item.title }}</h1>
+                <h1 class="item-title" :title="item.title">{{ item.title }}</h1>
                 <button
                   class="favorite-btn"
                   :class="{ favorited: isFavorited(item.id) }"
@@ -48,12 +59,12 @@
 
               <div class="item-section">
                 <h3>物品描述</h3>
-                <p class="item-desc">{{ item.description }}</p>
+                <p class="item-desc" :title="item.description">{{ item.description }}</p>
               </div>
 
               <div class="item-section" v-if="item.expectedSwap">
                 <h3>期望互换</h3>
-                <p class="expected-swap">{{ item.expectedSwap }}</p>
+                <p class="expected-swap" :title="item.expectedSwap">{{ item.expectedSwap }}</p>
               </div>
 
               <div class="item-section">
@@ -115,9 +126,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
+import { Picture } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
@@ -130,9 +142,18 @@ const favoriteStore = useFavoriteStore()
 const userStore = useUserStore()
 const historyStore = useHistoryStore()
 
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgNDAwIDMwMCI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IiNmNWY3ZmEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE2IiBmaWxsPSIjYzBjNGNjIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Liq5pWl5aSn5pWwPC90ZXh0Pjwvc3ZnPg=='
+
 const item = ref(null)
 const currentImage = ref('')
 const showOfferDialog = ref(false)
+const failedThumbnailIndices = ref(new Set())
+
+const previewImageList = computed(() => {
+  if (!item.value || !item.value.images) return [PLACEHOLDER_IMAGE]
+  const validImages = item.value.images.filter((_, idx) => !failedThumbnailIndices.value.has(idx))
+  return validImages.length > 0 ? validImages : [PLACEHOLDER_IMAGE]
+})
 
 const offerForm = ref({
   myItemId: null,
@@ -142,6 +163,23 @@ const offerForm = ref({
 const myItems = ref([])
 
 const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
+
+const handleThumbnailClick = (img, index) => {
+  if (failedThumbnailIndices.value.has(index)) {
+    currentImage.value = PLACEHOLDER_IMAGE
+  } else {
+    currentImage.value = img
+  }
+}
+
+const handleThumbnailError = (event, index) => {
+  failedThumbnailIndices.value.add(index)
+  event.target.src = PLACEHOLDER_IMAGE
+  if (currentImage.value === item.value?.images?.[index]) {
+    const validImages = item.value.images.filter((_, idx) => !failedThumbnailIndices.value.has(idx))
+    currentImage.value = validImages.length > 0 ? validImages[0] : PLACEHOLDER_IMAGE
+  }
+}
 
 const handleToggleFavorite = async () => {
   if (item.value) {
@@ -161,7 +199,13 @@ const loadDetail = async () => {
     const res = await api.get(`/item/${route.params.id}`, { params })
     if (res.data.success) {
       item.value = res.data.data
-      currentImage.value = res.data.data.images?.[0] || ''
+      failedThumbnailIndices.value.clear()
+      const images = res.data.data.images || []
+      if (images.length > 0) {
+        currentImage.value = images[0]
+      } else {
+        currentImage.value = PLACEHOLDER_IMAGE
+      }
       if (res.data.data.favorited) {
         favoriteStore.setItemFavorited(res.data.data.id, true)
       }
@@ -169,7 +213,7 @@ const loadDetail = async () => {
     }
   } catch (e) {
     item.value = null
-    currentImage.value = ''
+    currentImage.value = PLACEHOLDER_IMAGE
     ElMessage.error('加载物品详情失败')
   }
 }
@@ -250,10 +294,24 @@ onMounted(() => {
   background: #f5f7fa;
 }
 
+.image-slot {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  background: #f5f7fa;
+  color: #c0c4cc;
+  font-size: 14px;
+  gap: 12px;
+}
+
 .image-thumbnails {
   display: flex;
   gap: 12px;
   margin-top: 16px;
+  flex-wrap: wrap;
 
   .thumbnail {
     width: 80px;
@@ -262,6 +320,8 @@ onMounted(() => {
     overflow: hidden;
     cursor: pointer;
     border: 2px solid transparent;
+    flex-shrink: 0;
+    background: #f5f7fa;
 
     &.active {
       border-color: #409eff;
@@ -271,6 +331,7 @@ onMounted(() => {
       width: 100%;
       height: 100%;
       object-fit: cover;
+      display: block;
     }
   }
 }
@@ -278,9 +339,10 @@ onMounted(() => {
 .item-info {
   .title-row {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     justify-content: space-between;
     margin-bottom: 16px;
+    gap: 16px;
   }
 
   .item-title {
@@ -289,6 +351,10 @@ onMounted(() => {
     color: #303133;
     margin: 0;
     flex: 1;
+    min-width: 0;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    line-height: 1.4;
   }
 
   .favorite-btn {
@@ -302,6 +368,7 @@ onMounted(() => {
     justify-content: center;
     transition: all 0.3s;
     color: #c0c4cc;
+    flex-shrink: 0;
 
     &:hover {
       background: #fef0f0;
@@ -326,6 +393,7 @@ onMounted(() => {
     margin-bottom: 24px;
     padding-bottom: 24px;
     border-bottom: 1px solid #ebeef5;
+    flex-wrap: wrap;
 
     .publish-time {
       font-size: 14px;
@@ -348,6 +416,9 @@ onMounted(() => {
       font-size: 14px;
       color: #606266;
       line-height: 1.8;
+      word-break: break-word;
+      overflow-wrap: break-word;
+      white-space: pre-wrap;
     }
   }
 
@@ -361,6 +432,8 @@ onMounted(() => {
         font-size: 15px;
         font-weight: 500;
         color: #303133;
+        word-break: break-word;
+        overflow-wrap: break-word;
       }
 
       .publisher-stats {
@@ -375,6 +448,7 @@ onMounted(() => {
     margin-top: 32px;
     display: flex;
     gap: 12px;
+    flex-wrap: wrap;
   }
 }
 </style>

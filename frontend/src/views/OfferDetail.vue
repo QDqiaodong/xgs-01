@@ -17,7 +17,7 @@
           <div class="offer-item-card">
             <div class="item-label">我的物品</div>
             <div class="item-content" v-if="myItem">
-              <img :src="myItem.images?.[0]" class="item-image" @click="goToItemDetail(myItem.id)" />
+              <img :src="myItem.images?.[0] || PLACEHOLDER_IMAGE" class="item-image" @error="handleImageError" @click="goToItemDetail(myItem.id)" />
               <div class="item-info">
                 <div class="item-title" @click="goToItemDetail(myItem.id)">{{ myItem.title }}</div>
                 <div class="item-desc">{{ myItem.description }}</div>
@@ -34,7 +34,7 @@
           <div class="offer-item-card">
             <div class="item-label">对方物品</div>
             <div class="item-content" v-if="targetItem">
-              <img :src="targetItem.images?.[0]" class="item-image" @click="goToItemDetail(targetItem.id)" />
+              <img :src="targetItem.images?.[0] || PLACEHOLDER_IMAGE" class="item-image" @error="handleImageError" @click="goToItemDetail(targetItem.id)" />
               <div class="item-info">
                 <div class="item-title" @click="goToItemDetail(targetItem.id)">{{ targetItem.title }}</div>
                 <div class="item-desc">{{ targetItem.description }}</div>
@@ -85,6 +85,12 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '@/utils/api'
 import { useUserStore } from '@/stores/user'
+
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgNDAwIDMwMCI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IiNmNWY3ZmEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE2IiBmaWxsPSIjYzBjNGNjIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Liq5pWl5aSn5pWwPC90ZXh0Pjwvc3ZnPg=='
+
+const handleImageError = (e) => {
+  e.target.src = PLACEHOLDER_IMAGE
+}
 
 const router = useRouter()
 const route = useRoute()

@@ -38,7 +38,7 @@
               <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
             </el-icon>
           </button>
-          <img :src="item.images[0] || 'https://picsum.photos/400/300'" class="item-image" />
+          <img :src="item.images?.[0] || PLACEHOLDER_IMAGE" class="item-image" @error="handleImageError" />
           <div class="item-content">
             <div class="item-title">{{ item.title }}</div>
             <span class="item-category">{{ getCategoryName(item) }}</span>
@@ -90,7 +90,7 @@
           class="history-card"
           @click="goDetail(item.id)"
         >
-          <img :src="item.images?.[0] || 'https://picsum.photos/400/300'" class="history-image" />
+          <img :src="item.images?.[0] || PLACEHOLDER_IMAGE" class="history-image" @error="handleImageError" />
           <div class="history-content">
             <div class="history-title">{{ item.title }}</div>
             <span class="history-category">{{ getCategoryName(item) }}</span>
@@ -115,6 +115,12 @@ const router = useRouter()
 const favoriteStore = useFavoriteStore()
 const userStore = useUserStore()
 const historyStore = useHistoryStore()
+
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgNDAwIDMwMCI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IiNmNWY3ZmEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE2IiBmaWxsPSIjYzBjNGNjIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Liq5pWl5aSn5pWwPC90ZXh0Pjwvc3ZnPg=='
+
+const handleImageError = (e) => {
+  e.target.src = PLACEHOLDER_IMAGE
+}
 
 const recentHistory = computed(() => historyStore.recentHistory)
 const formatBrowseTime = (timestamp) => historyStore.formatBrowseTime(timestamp)

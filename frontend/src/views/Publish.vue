@@ -56,6 +56,7 @@
             :auto-upload="false"
             :on-change="handleFileChange"
             :on-remove="handleFileRemove"
+            :on-sort-change="handleSortChange"
             :before-upload="beforeUpload"
             list-type="picture-card"
             :limit="9"
@@ -148,6 +149,13 @@ const setDraftId = (id) => {
   }
 }
 
+const syncImagesFromFileList = () => {
+  form.value.images = fileList.value.map(f => f.raw || f.url)
+  if (formRef.value) {
+    formRef.value.validateField('images')
+  }
+}
+
 const loadDraft = (draftId) => {
   const draft = draftStore.getDraft(draftId)
   if (draft) {
@@ -162,9 +170,10 @@ const loadDraft = (draftId) => {
       fileList.value = draft.images.map((url, index) => ({
         name: `image_${index}`,
         url: url,
-        raw: base64ToFile(url, `image_${index}.png`)
+        raw: base64ToFile(url, `image_${index}.png`),
+        uid: `draft_${index}`
       }))
-      form.value.images = draft.images.map(url => base64ToFile(url))
+      syncImagesFromFileList()
     }
   }
 }
@@ -227,20 +236,20 @@ const handleFileChange = async (file, list) => {
     const compressed = await compressImages([file.raw])
     list[list.length - 1].raw = compressed[0]
   }
-  fileList.value = list
-  form.value.images = list.map(f => f.raw || f.url)
-  if (formRef.value) {
-    formRef.value.validateField('images')
-  }
+  fileList.value = [...list]
+  syncImagesFromFileList()
   triggerAutoSave()
 }
 
 const handleFileRemove = (file, list) => {
-  fileList.value = list
-  form.value.images = list.map(f => f.raw || f.url)
-  if (formRef.value) {
-    formRef.value.validateField('images')
-  }
+  fileList.value = [...list]
+  syncImagesFromFileList()
+  triggerAutoSave()
+}
+
+const handleSortChange = (list) => {
+  fileList.value = [...list]
+  syncImagesFromFileList()
   triggerAutoSave()
 }
 
@@ -285,6 +294,9 @@ const handleSubmit = async () => {
         fileList.value.forEach((file, index) => {
           if (file.raw) {
             formData.append(`images`, file.raw)
+          } else if (file.url && file.url.startsWith('data:')) {
+            const recoveredFile = base64ToFile(file.url, `image_${index}.png`)
+            formData.append(`images`, recoveredFile)
           }
         })
 
