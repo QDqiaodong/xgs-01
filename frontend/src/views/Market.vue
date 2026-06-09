@@ -5,7 +5,7 @@
     <div class="filter-bar">
       <el-form :inline="true" :model="filterForm">
         <el-form-item label="品类">
-          <el-select v-model="filterForm.categoryId" placeholder="全部品类" clearable>
+          <el-select v-model="filterForm.categoryId" placeholder="全部品类" clearable @change="handleFilterChange">
             <el-option label="全部" :value="null" />
             <el-option 
               v-for="cat in categories" 
@@ -16,7 +16,16 @@
           </el-select>
         </el-form-item>
         <el-form-item label="成色">
-          <el-select v-model="filterForm.condition" placeholder="全部成色" clearable>
+          <el-select 
+            v-model="filterForm.condition" 
+            placeholder="全部成色" 
+            clearable
+            multiple
+            collapse-tags
+            collapse-tags-tooltip
+            style="min-width: 180px"
+            @change="handleFilterChange"
+          >
             <el-option label="全新" value="全新" />
             <el-option label="九成新" value="九成新" />
             <el-option label="八成新" value="八成新" />
@@ -25,7 +34,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="发布时间">
-          <el-select v-model="filterForm.timeRange" placeholder="全部时间" clearable>
+          <el-select v-model="filterForm.timeRange" placeholder="全部时间" clearable @change="handleFilterChange">
             <el-option label="今天" value="today" />
             <el-option label="本周" value="week" />
             <el-option label="本月" value="month" />
@@ -38,6 +47,7 @@
             style="width: 250px"
             clearable
             @keyup.enter="handleSearch"
+            @change="handleFilterChange"
           >
             <template #prefix>
               <el-icon><Search /></el-icon>
@@ -47,8 +57,50 @@
         <el-form-item>
           <el-button type="primary" @click="handleSearch">搜索</el-button>
           <el-button @click="handleReset">重置</el-button>
+          <el-button link type="primary" @click="showAdvanced = !showAdvanced">
+            <el-icon style="vertical-align: middle"><component :is="showAdvanced ? 'ArrowUp' : 'ArrowDown'" /></el-icon>
+            <span style="vertical-align: middle">{{ showAdvanced ? '收起高级筛选' : '高级筛选' }}</span>
+          </el-button>
         </el-form-item>
       </el-form>
+
+      <div class="advanced-panel" v-show="showAdvanced">
+        <el-divider style="margin: 0 0 16px" />
+        <el-form :inline="true" :model="filterForm" label-width="100px">
+          <el-form-item label="有实物图">
+            <el-switch v-model="filterForm.hasImages" active-text="是" inactive-text="否" @change="handleFilterChange" />
+          </el-form-item>
+          <el-form-item label="期望交换">
+            <el-input 
+              v-model="filterForm.exchangeKeyword" 
+              placeholder="输入期望交换的物品关键词" 
+              style="width: 280px"
+              clearable
+              @keyup.enter="handleSearch"
+              @change="handleFilterChange"
+            >
+              <template #prefix>
+                <el-icon><RefreshRight /></el-icon>
+              </template>
+            </el-input>
+          </el-form-item>
+        </el-form>
+        <div class="active-filters" v-if="activeFiltersCount > 0">
+          <span class="active-label">已选条件 ({{ activeFiltersCount }}):</span>
+          <el-tag 
+            v-for="tag in activeFilterTags" 
+            :key="tag.key" 
+            closable 
+            type="info" 
+            size="small"
+            style="margin-right: 8px; margin-bottom: 4px"
+            @close="removeFilter(tag.key)"
+          >
+            {{ tag.label }}
+          </el-tag>
+          <el-button link type="primary" size="small" @click="handleReset">清空全部</el-button>
+        </div>
+      </div>
     </div>
 
     <div class="card-grid" ref="cardGridRef">
@@ -92,9 +144,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Loading } from '@element-plus/icons-vue'
+import { Loading, Search, ArrowDown, ArrowUp, RefreshRight } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
@@ -119,6 +171,7 @@ const loading = ref(false)
 const items = ref([])
 const total = ref(0)
 const noMore = ref(false)
+const showAdvanced = ref(false)
 
 const categories = ref([
   { id: 1, name: '数码家电' },
@@ -129,14 +182,104 @@ const categories = ref([
   { id: 6, name: '服饰鞋包' }
 ])
 
-const filterForm = ref({
+const createDefaultFilter = () => ({
   categoryId: null,
-  condition: null,
+  condition: [],
   timeRange: null,
   keyword: '',
+  hasImages: false,
+  exchangeKeyword: '',
   page: 1,
   size: 12
 })
+
+const filterForm = ref(createDefaultFilter())
+
+const activeFilterTags = computed(() => {
+  const tags = []
+  if (filterForm.value.categoryId) {
+    const cat = categories.value.find(c => c.id === filterForm.value.categoryId)
+    if (cat) tags.push({ key: 'categoryId', label: `品类: ${cat.name}` })
+  }
+  if (filterForm.value.condition && filterForm.value.condition.length > 0) {
+    tags.push({ key: 'condition', label: `成色: ${filterForm.value.condition.join('/')}` })
+  }
+  if (filterForm.value.timeRange) {
+    const timeMap = { today: '今天', week: '本周', month: '本月' }
+    tags.push({ key: 'timeRange', label: `发布时间: ${timeMap[filterForm.value.timeRange]}` })
+  }
+  if (filterForm.value.keyword) {
+    tags.push({ key: 'keyword', label: `关键词: ${filterForm.value.keyword}` })
+  }
+  if (filterForm.value.hasImages) {
+    tags.push({ key: 'hasImages', label: '有实物图' })
+  }
+  if (filterForm.value.exchangeKeyword) {
+    tags.push({ key: 'exchangeKeyword', label: `期望交换: ${filterForm.value.exchangeKeyword}` })
+  }
+  return tags
+})
+
+const activeFiltersCount = computed(() => activeFilterTags.value.length)
+
+const removeFilter = (key) => {
+  switch (key) {
+    case 'categoryId':
+      filterForm.value.categoryId = null
+      break
+    case 'condition':
+      filterForm.value.condition = []
+      break
+    case 'timeRange':
+      filterForm.value.timeRange = null
+      break
+    case 'keyword':
+      filterForm.value.keyword = ''
+      break
+    case 'hasImages':
+      filterForm.value.hasImages = false
+      break
+    case 'exchangeKeyword':
+      filterForm.value.exchangeKeyword = ''
+      break
+  }
+  handleSearch()
+}
+
+const syncToUrl = () => {
+  const query = {}
+  if (filterForm.value.categoryId) query.category = String(filterForm.value.categoryId)
+  if (filterForm.value.condition && filterForm.value.condition.length > 0) {
+    query.condition = filterForm.value.condition.join(',')
+  }
+  if (filterForm.value.timeRange) query.timeRange = filterForm.value.timeRange
+  if (filterForm.value.keyword) query.keyword = filterForm.value.keyword
+  if (filterForm.value.hasImages) query.hasImages = 'true'
+  if (filterForm.value.exchangeKeyword) query.exchangeKeyword = filterForm.value.exchangeKeyword
+  query.page = String(filterForm.value.page)
+  query.size = String(filterForm.value.size)
+
+  router.replace({
+    path: route.path,
+    query
+  })
+}
+
+const initFromUrl = () => {
+  const defaultFilter = createDefaultFilter()
+  const { query } = route
+
+  if (query.category) defaultFilter.categoryId = Number(query.category)
+  if (query.condition) defaultFilter.condition = query.condition.split(',').filter(Boolean)
+  if (query.timeRange) defaultFilter.timeRange = query.timeRange
+  if (query.keyword) defaultFilter.keyword = query.keyword
+  if (query.hasImages === 'true') defaultFilter.hasImages = true
+  if (query.exchangeKeyword) defaultFilter.exchangeKeyword = query.exchangeKeyword
+  if (query.page) defaultFilter.page = Number(query.page)
+  if (query.size) defaultFilter.size = Number(query.size)
+
+  filterForm.value = defaultFilter
+}
 
 const imageHeights = [200, 260, 320, 240, 360, 280, 220, 300, 340, 250, 380, 270]
 
@@ -164,8 +307,13 @@ const handleSearch = async () => {
   loading.value = true
   noMore.value = false
   filterForm.value.page = 1
+  syncToUrl()
   try {
     const params = { ...filterForm.value }
+    if (params.condition && params.condition.length > 0) {
+      params.conditions = params.condition
+    }
+    delete params.condition
     if (userStore.isLoggedIn && userStore.userInfo.id) {
       params.userId = userStore.userInfo.id
     }
@@ -191,8 +339,13 @@ const loadMore = async () => {
   if (loading.value || noMore.value) return
   loading.value = true
   filterForm.value.page += 1
+  syncToUrl()
   try {
     const params = { ...filterForm.value }
+    if (params.condition && params.condition.length > 0) {
+      params.conditions = params.condition
+    }
+    delete params.condition
     if (userStore.isLoggedIn && userStore.userInfo.id) {
       params.userId = userStore.userInfo.id
     }
@@ -218,14 +371,11 @@ const loadMore = async () => {
 }
 
 const handleReset = () => {
-  filterForm.value = {
-    categoryId: null,
-    condition: null,
-    timeRange: null,
-    keyword: '',
-    page: 1,
-    size: 12
-  }
+  filterForm.value = createDefaultFilter()
+  handleSearch()
+}
+
+const handleFilterChange = () => {
   handleSearch()
 }
 
@@ -247,9 +397,7 @@ const onScroll = () => {
 }
 
 onMounted(() => {
-  if (route.query.category) {
-    filterForm.value.categoryId = Number(route.query.category)
-  }
+  initFromUrl()
   handleSearch()
   window.addEventListener('scroll', onScroll)
 })
@@ -275,6 +423,37 @@ onBeforeUnmount(() => {
 
   .no-more {
     color: #c0c4cc;
+  }
+}
+
+.advanced-panel {
+  animation: slideDown 0.3s ease;
+
+  .active-filters {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px dashed #ebeef5;
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+
+    .active-label {
+      font-size: 13px;
+      color: #606266;
+      margin-right: 8px;
+    }
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
 

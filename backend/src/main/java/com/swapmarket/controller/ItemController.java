@@ -29,9 +29,13 @@ public class ItemController {
             @RequestParam(defaultValue = "12") int size,
             @RequestParam(required = false) Long categoryId,
             @RequestParam(required = false) String condition,
+            @RequestParam(required = false) List<String> conditions,
+            @RequestParam(required = false) String timeRange,
             @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) Boolean hasImages,
+            @RequestParam(required = false) String exchangeKeyword,
             @RequestParam(required = false) Long userId) {
-        return Result.success(itemService.listItems(page, size, categoryId, condition, keyword, userId));
+        return Result.success(itemService.listItems(page, size, categoryId, condition, conditions, timeRange, keyword, hasImages, exchangeKeyword, userId));
     }
 
     @GetMapping("/my")

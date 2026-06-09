@@ -22,8 +22,12 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.time.DayOfWeek;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -62,16 +66,44 @@ public class ItemService {
         return items;
     }
 
-    public PageResult<Item> listItems(int page, int size, Long categoryId, String condition, String keyword) {
+    public PageResult<Item> listItems(int page, int size, Long categoryId, String condition,
+                                      List<String> conditions, String timeRange, String keyword,
+                                      Boolean hasImages, String exchangeKeyword) {
         LambdaQueryWrapper<Item> wrapper = new LambdaQueryWrapper<Item>()
                 .eq(Item::getStatus, "published")
                 .eq(categoryId != null, Item::getCategoryId, categoryId)
-                .eq(condition != null, Item::getCondition, condition)
+                .eq(condition != null && conditions == null, Item::getCondition, condition)
+                .in(conditions != null && !conditions.isEmpty(), Item::getCondition, conditions)
                 .and(keyword != null, w -> w
                         .like(Item::getTitle, keyword)
                         .or()
                         .like(Item::getDescription, keyword))
+                .like(exchangeKeyword != null, Item::getExpectedSwap, exchangeKeyword)
                 .orderByDesc(Item::getCreateTime);
+
+        if (timeRange != null) {
+            LocalDateTime startTime = null;
+            switch (timeRange) {
+                case "today":
+                    startTime = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
+                    break;
+                case "week":
+                    LocalDate monday = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                    startTime = LocalDateTime.of(monday, LocalTime.MIN);
+                    break;
+                case "month":
+                    LocalDate firstDayOfMonth = LocalDate.now().with(TemporalAdjusters.firstDayOfMonth());
+                    startTime = LocalDateTime.of(firstDayOfMonth, LocalTime.MIN);
+                    break;
+            }
+            if (startTime != null) {
+                wrapper.ge(Item::getCreateTime, startTime);
+            }
+        }
+
+        if (Boolean.TRUE.equals(hasImages)) {
+            wrapper.exists("SELECT 1 FROM item_image ii WHERE ii.item_id = item.id");
+        }
 
         Page<Item> itemPage = itemMapper.selectPage(Page.of(page, size), wrapper);
         enrichItems(itemPage.getRecords());
@@ -263,8 +295,10 @@ public class ItemService {
         return items;
     }
 
-    public PageResult<Item> listItems(int page, int size, Long categoryId, String condition, String keyword, Long userId) {
-        PageResult<Item> result = listItems(page, size, categoryId, condition, keyword);
+    public PageResult<Item> listItems(int page, int size, Long categoryId, String condition,
+                                      List<String> conditions, String timeRange, String keyword,
+                                      Boolean hasImages, String exchangeKeyword, Long userId) {
+        PageResult<Item> result = listItems(page, size, categoryId, condition, conditions, timeRange, keyword, hasImages, exchangeKeyword);
         if (userId != null) {
             enrichItems(result.getList(), userId);
         }
