@@ -48,12 +48,31 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             {"idx_notification_create_time", "CREATE INDEX idx_notification_create_time ON notification(create_time)"}
     };
 
+    private static final String ITEM_LIKE_TABLE_DDL =
+            "CREATE TABLE IF NOT EXISTS item_like (" +
+            "  id BIGINT PRIMARY KEY AUTO_INCREMENT," +
+            "  user_id BIGINT NOT NULL," +
+            "  item_id BIGINT NOT NULL," +
+            "  create_time DATETIME DEFAULT CURRENT_TIMESTAMP," +
+            "  deleted TINYINT DEFAULT 0," +
+            "  UNIQUE KEY uk_user_item(user_id, item_id)," +
+            "  INDEX idx_user_id(user_id)," +
+            "  INDEX idx_item_id(item_id)" +
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    private static final String[][] ITEM_LIKE_INDEXES = {
+            {"idx_user_id", "CREATE INDEX idx_user_id ON item_like(user_id)"},
+            {"idx_item_id", "CREATE INDEX idx_item_id ON item_like(item_id)"}
+    };
+
     @Override
     public void run(ApplicationArguments args) {
         try {
             migrateNotificationTable();
+            migrateItemLikeTable();
+            migrateItemLikeCountColumn();
         } catch (Exception e) {
-            log.error("数据库迁移执行失败，如 notification 相关功能异常请检查数据库权限：{}", e.getMessage());
+            log.error("数据库迁移执行失败，如相关功能异常请检查数据库权限：{}", e.getMessage());
         }
     }
 
@@ -163,5 +182,69 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
         try (Statement stmt = conn.createStatement()) {
             stmt.execute(sql);
         }
+    }
+
+    private void migrateItemLikeTable() {
+        try (Connection conn = dataSource.getConnection()) {
+            String databaseName = getCurrentDatabase(conn);
+            if (databaseName == null) {
+                log.warn("无法获取当前数据库名，跳过 item_like 表迁移");
+                return;
+            }
+
+            if (!tableExists(conn, databaseName, "item_like")) {
+                log.info("检测到 item_like 表不存在，开始创建...");
+                execute(conn, ITEM_LIKE_TABLE_DDL);
+                log.info("item_like 表创建完成");
+            } else {
+                log.debug("item_like 表已存在，跳过建表");
+                ensureIndexes(conn, databaseName, "item_like", ITEM_LIKE_INDEXES);
+            }
+        } catch (Exception e) {
+            log.error("item_like 表迁移失败: {}", e.getMessage());
+        }
+    }
+
+    private void migrateItemLikeCountColumn() {
+        try (Connection conn = dataSource.getConnection()) {
+            String databaseName = getCurrentDatabase(conn);
+            if (databaseName == null) {
+                log.warn("无法获取当前数据库名，跳过 item.like_count 字段迁移");
+                return;
+            }
+
+            if (!tableExists(conn, databaseName, "item")) {
+                log.warn("item 表不存在，跳过 like_count 字段迁移");
+                return;
+            }
+
+            if (!columnExists(conn, databaseName, "item", "like_count")) {
+                log.info("检测到 item.like_count 字段不存在，开始添加...");
+                String alterSql = "ALTER TABLE item ADD COLUMN like_count INT DEFAULT 0";
+                execute(conn, alterSql);
+                log.info("item.like_count 字段添加完成");
+            } else {
+                log.debug("item.like_count 字段已存在，跳过添加");
+                ensureColumnDefault(conn, databaseName, "item", "like_count", "0");
+            }
+        } catch (Exception e) {
+            log.error("item.like_count 字段迁移失败: {}", e.getMessage());
+        }
+    }
+
+    private boolean columnExists(Connection conn, String databaseName, String tableName, String columnName) throws Exception {
+        String sql = "SELECT COUNT(*) FROM information_schema.COLUMNS " +
+                     "WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND COLUMN_NAME = ?";
+        try (PreparedStatement ps = conn.prepareStatement(sql)) {
+            ps.setString(1, databaseName);
+            ps.setString(2, tableName);
+            ps.setString(3, columnName);
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    return rs.getInt(1) > 0;
+                }
+            }
+        }
+        return false;
     }
 }

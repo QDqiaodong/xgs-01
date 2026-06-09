@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS item (
     status VARCHAR(20) DEFAULT 'published',
     is_top TINYINT DEFAULT 0,
     view_count INT DEFAULT 0,
+    like_count INT DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT DEFAULT 0,
@@ -70,6 +71,17 @@ CREATE TABLE IF NOT EXISTS swap_offer (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS favorite (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    user_id BIGINT NOT NULL,
+    item_id BIGINT NOT NULL,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT DEFAULT 0,
+    UNIQUE KEY uk_user_item(user_id, item_id),
+    INDEX idx_user_id(user_id),
+    INDEX idx_item_id(item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS item_like (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     user_id BIGINT NOT NULL,
     item_id BIGINT NOT NULL,

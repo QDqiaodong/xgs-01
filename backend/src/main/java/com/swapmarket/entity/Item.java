@@ -30,6 +30,8 @@ public class Item {
     
     private Integer viewCount;
     
+    private Integer likeCount;
+    
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     
@@ -47,4 +49,7 @@ public class Item {
 
     @TableField(exist = false)
     private Boolean favorited;
+
+    @TableField(exist = false)
+    private Boolean liked;
 }

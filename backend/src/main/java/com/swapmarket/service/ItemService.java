@@ -7,9 +7,11 @@ import com.swapmarket.entity.Category;
 import com.swapmarket.entity.Favorite;
 import com.swapmarket.entity.Item;
 import com.swapmarket.entity.ItemImage;
+import com.swapmarket.entity.ItemLike;
 import com.swapmarket.mapper.CategoryMapper;
 import com.swapmarket.mapper.FavoriteMapper;
 import com.swapmarket.mapper.ItemImageMapper;
+import com.swapmarket.mapper.ItemLikeMapper;
 import com.swapmarket.mapper.ItemMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.RedisTemplate;
@@ -43,6 +45,7 @@ public class ItemService {
     private final ItemImageMapper itemImageMapper;
     private final CategoryMapper categoryMapper;
     private final FavoriteMapper favoriteMapper;
+    private final ItemLikeMapper itemLikeMapper;
     private final FileStorageService fileStorageService;
     private final RedisTemplate<String, Object> redisTemplate;
 
@@ -144,6 +147,7 @@ public class ItemService {
         item.setStatus("published");
         item.setIsTop(0);
         item.setViewCount(0);
+        item.setLikeCount(0);
         itemMapper.insert(item);
 
         if (images != null && !images.isEmpty()) {
@@ -203,6 +207,7 @@ public class ItemService {
                 ));
 
         Set<Long> favoriteItemIds = null;
+        Set<Long> likedItemIds = null;
         if (userId != null) {
             favoriteItemIds = favoriteMapper.selectList(new LambdaQueryWrapper<Favorite>()
                             .eq(Favorite::getUserId, userId)
@@ -210,13 +215,24 @@ public class ItemService {
                     .stream()
                     .map(Favorite::getItemId)
                     .collect(Collectors.toSet());
+
+            likedItemIds = itemLikeMapper.selectList(new LambdaQueryWrapper<ItemLike>()
+                            .eq(ItemLike::getUserId, userId)
+                            .in(ItemLike::getItemId, itemIds))
+                    .stream()
+                    .map(ItemLike::getItemId)
+                    .collect(Collectors.toSet());
         }
 
         for (Item item : items) {
             item.setCategoryName(categoryMap.get(item.getCategoryId()));
             item.setImages(imageMap.getOrDefault(item.getId(), new ArrayList<>()));
+            if (item.getLikeCount() == null) {
+                item.setLikeCount(0);
+            }
             if (userId != null) {
                 item.setFavorited(favoriteItemIds.contains(item.getId()));
+                item.setLiked(likedItemIds.contains(item.getId()));
             }
         }
     }
@@ -319,5 +335,66 @@ public class ItemService {
             enrichItems(List.of(item), userId);
         }
         return item;
+    }
+
+    @Transactional
+    public void addLike(Long userId, Long itemId) {
+        Item item = itemMapper.selectById(itemId);
+        if (item == null || item.getDeleted() == 1) {
+            throw new RuntimeException("物品不存在");
+        }
+        if (!"published".equals(item.getStatus())) {
+            throw new RuntimeException("物品已下架，无法点赞");
+        }
+        ItemLike existing = itemLikeMapper.selectOne(new LambdaQueryWrapper<ItemLike>()
+                .eq(ItemLike::getUserId, userId)
+                .eq(ItemLike::getItemId, itemId));
+        if (existing != null) {
+            throw new RuntimeException("您已经点过赞了");
+        }
+        ItemLike itemLike = new ItemLike();
+        itemLike.setUserId(userId);
+        itemLike.setItemId(itemId);
+        itemLikeMapper.insert(itemLike);
+
+        item.setLikeCount(item.getLikeCount() == null ? 1 : item.getLikeCount() + 1);
+        itemMapper.updateById(item);
+    }
+
+    @Transactional
+    public void removeLike(Long userId, Long itemId) {
+        Item item = itemMapper.selectById(itemId);
+        if (item == null || item.getDeleted() == 1) {
+            throw new RuntimeException("物品不存在");
+        }
+        ItemLike existing = itemLikeMapper.selectOne(new LambdaQueryWrapper<ItemLike>()
+                .eq(ItemLike::getUserId, userId)
+                .eq(ItemLike::getItemId, itemId));
+        if (existing == null) {
+            return;
+        }
+        itemLikeMapper.delete(new LambdaQueryWrapper<ItemLike>()
+                .eq(ItemLike::getUserId, userId)
+                .eq(ItemLike::getItemId, itemId));
+
+        if (item.getLikeCount() != null && item.getLikeCount() > 0) {
+            item.setLikeCount(item.getLikeCount() - 1);
+            itemMapper.updateById(item);
+        }
+    }
+
+    public List<Item> getLikeRanking(int limit, Long userId) {
+        List<Item> items = itemMapper.selectList(new LambdaQueryWrapper<Item>()
+                .eq(Item::getStatus, "published")
+                .orderByDesc(Item::getLikeCount)
+                .orderByDesc(Item::getCreateTime)
+                .last("LIMIT " + Math.min(limit, 100)));
+
+        if (userId != null) {
+            enrichItems(items, userId);
+        } else {
+            enrichItems(items);
+        }
+        return items;
     }
 }

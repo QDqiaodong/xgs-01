@@ -90,4 +90,23 @@ public class ItemController {
         itemService.republish(userId, id);
         return Result.success();
     }
+
+    @PostMapping("/like/{id}")
+    public Result<Void> addLike(@RequestParam(defaultValue = "1") Long userId, @PathVariable Long id) {
+        itemService.addLike(userId, id);
+        return Result.success();
+    }
+
+    @DeleteMapping("/like/{id}")
+    public Result<Void> removeLike(@RequestParam(defaultValue = "1") Long userId, @PathVariable Long id) {
+        itemService.removeLike(userId, id);
+        return Result.success();
+    }
+
+    @GetMapping("/like-ranking")
+    public Result<List<Item>> getLikeRanking(
+            @RequestParam(defaultValue = "10") int limit,
+            @RequestParam(required = false) Long userId) {
+        return Result.success(itemService.getLikeRanking(limit, userId));
+    }
 }
