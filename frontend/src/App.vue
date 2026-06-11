@@ -214,18 +214,28 @@ const handlePopoverShow = () => {
   notificationStore.loadNotifications()
 }
 
-const handleMarkRead = (id) => {
-  notificationStore.markAsRead(id)
+const handleMarkRead = async (id) => {
+  try {
+    await notificationStore.markAsRead(id)
+  } catch (e) {
+    ElMessage.error('标记已读失败，请稍后重试')
+  }
 }
 
-const handleMarkAllRead = () => {
-  notificationStore.markAllAsRead()
-  ElMessage.success('已全部标记为已读')
+const handleMarkAllRead = async () => {
+  try {
+    await notificationStore.markAllAsRead()
+    ElMessage.success('已全部标记为已读')
+  } catch (e) {
+    ElMessage.error('标记已读失败，请稍后重试')
+  }
 }
 
-const handleNotificationClick = (item) => {
+const handleNotificationClick = async (item) => {
   if (!item.readFlag) {
-    notificationStore.markAsRead(item.id)
+    try {
+      await notificationStore.markAsRead(item.id)
+    } catch (e) {}
   }
   if (item.offerId) {
     router.push(`/offer/${item.offerId}`)

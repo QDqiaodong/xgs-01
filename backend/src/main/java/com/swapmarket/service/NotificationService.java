@@ -9,13 +9,16 @@ import com.swapmarket.mapper.ItemMapper;
 import com.swapmarket.mapper.NotificationMapper;
 import com.swapmarket.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Random;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class NotificationService {
@@ -26,10 +29,23 @@ public class NotificationService {
 
     private static final String NOTIFICATION_LIST_KEY = "swap:notifications:";
     private static final String NOTIFICATION_UNREAD_KEY = "swap:notifications:unread:";
+    private static final Random RANDOM = new Random();
+
+    private static final long BASE_TTL_MINUTES = 5;
+    private static final long JITTER_MAX_SECONDS = 60;
+    private static final long DOUBLE_DELETE_DELAY_MS = 500;
 
     public static final String TYPE_NEW_OFFER = "new_offer";
     public static final String TYPE_OFFER_ACCEPTED = "offer_accepted";
     public static final String TYPE_OFFER_REJECTED = "offer_rejected";
+
+    private long getTtlWithJitterMinutes() {
+        return BASE_TTL_MINUTES;
+    }
+
+    private long getTtlWithJitterSeconds() {
+        return BASE_TTL_MINUTES * 60 + RANDOM.nextInt((int) JITTER_MAX_SECONDS);
+    }
 
     public List<Notification> getNotifications(Long userId) {
         String key = NOTIFICATION_LIST_KEY + userId;
@@ -45,7 +61,7 @@ public class NotificationService {
                         .orderByDesc(Notification::getCreateTime)
         );
 
-        redisTemplate.opsForValue().set(key, notifications, 30, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set(key, notifications, getTtlWithJitterSeconds(), TimeUnit.SECONDS);
         return notifications;
     }
 
@@ -62,7 +78,7 @@ public class NotificationService {
                         .eq(Notification::getReadFlag, false)
         );
 
-        redisTemplate.opsForValue().set(key, count, 30, TimeUnit.MINUTES);
+        redisTemplate.opsForValue().set(key, count, getTtlWithJitterSeconds(), TimeUnit.SECONDS);
         return count;
     }
 
@@ -75,20 +91,22 @@ public class NotificationService {
         if (Boolean.TRUE.equals(notification.getReadFlag())) {
             return;
         }
+        evictCache(userId);
         notification.setReadFlag(true);
         notificationMapper.updateById(notification);
-        evictCache(userId);
+        scheduleDoubleDelete(userId);
     }
 
     @Transactional
     public void markAllAsRead(Long userId) {
+        evictCache(userId);
         notificationMapper.update(null,
                 new LambdaUpdateWrapper<Notification>()
                         .eq(Notification::getUserId, userId)
                         .eq(Notification::getReadFlag, false)
                         .set(Notification::getReadFlag, true)
         );
-        evictCache(userId);
+        scheduleDoubleDelete(userId);
     }
 
     @Transactional
@@ -105,8 +123,9 @@ public class NotificationService {
         notification.setOfferId(offerId);
         notification.setItemId(itemId);
         notification.setReadFlag(false);
-        notificationMapper.insert(notification);
         evictCache(toUserId);
+        notificationMapper.insert(notification);
+        scheduleDoubleDelete(toUserId);
     }
 
     @Transactional
@@ -120,8 +139,9 @@ public class NotificationService {
         notification.setOfferId(offerId);
         notification.setItemId(itemId);
         notification.setReadFlag(false);
-        notificationMapper.insert(notification);
         evictCache(fromUserId);
+        notificationMapper.insert(notification);
+        scheduleDoubleDelete(fromUserId);
     }
 
     @Transactional
@@ -135,12 +155,27 @@ public class NotificationService {
         notification.setOfferId(offerId);
         notification.setItemId(itemId);
         notification.setReadFlag(false);
-        notificationMapper.insert(notification);
         evictCache(fromUserId);
+        notificationMapper.insert(notification);
+        scheduleDoubleDelete(fromUserId);
     }
 
     private void evictCache(Long userId) {
         redisTemplate.delete(NOTIFICATION_LIST_KEY + userId);
         redisTemplate.delete(NOTIFICATION_UNREAD_KEY + userId);
+    }
+
+    private void scheduleDoubleDelete(Long userId) {
+        new Thread(() -> {
+            try {
+                Thread.sleep(DOUBLE_DELETE_DELAY_MS);
+                evictCache(userId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                log.warn("Double delete interrupted for user: {}", userId);
+            } catch (Exception e) {
+                log.error("Double delete failed for user: {}", userId, e);
+            }
+        }, "notification-cache-cleaner-" + userId).start();
     }
 }

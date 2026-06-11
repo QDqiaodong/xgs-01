@@ -23,6 +23,7 @@ const formatTime = (t) => {
 export const useNotificationStore = defineStore('notification', () => {
   const notifications = ref([])
   const loading = ref(false)
+  let loadRequestId = 0
 
   const userStore = useUserStore()
 
@@ -39,11 +40,15 @@ export const useNotificationStore = defineStore('notification', () => {
       notifications.value = []
       return
     }
+    const currentRequestId = ++loadRequestId
     loading.value = true
     try {
       const res = await api.get('/notification/list', {
         params: { userId: userStore.userInfo.id }
       })
+      if (currentRequestId !== loadRequestId) {
+        return
+      }
       if (res.data.success) {
         notifications.value = res.data.data.map(n => ({
           ...n,
@@ -51,33 +56,45 @@ export const useNotificationStore = defineStore('notification', () => {
         }))
       }
     } catch (e) {
-      notifications.value = []
+      if (currentRequestId === loadRequestId) {
+        notifications.value = []
+      }
     } finally {
-      loading.value = false
+      if (currentRequestId === loadRequestId) {
+        loading.value = false
+      }
     }
   }
 
   const markAsRead = async (id) => {
     const notification = notifications.value.find(n => n.id === id)
     if (notification && !notification.readFlag) {
+      notification.readFlag = true
       try {
         await api.post(`/notification/read/${id}`, null, {
           params: { userId: userStore.userInfo.id }
         })
-      } catch (e) {}
-      notification.readFlag = true
+      } catch (e) {
+        notification.readFlag = false
+        throw e
+      }
     }
   }
 
   const markAllAsRead = async () => {
+    const previousState = notifications.value.map(n => ({ ...n }))
+    notifications.value.forEach(n => {
+      n.readFlag = true
+    })
     try {
       await api.post('/notification/read-all', null, {
         params: { userId: userStore.userInfo.id }
       })
-    } catch (e) {}
-    notifications.value.forEach(n => {
-      n.readFlag = true
-    })
+      loadRequestId++
+    } catch (e) {
+      notifications.value = previousState
+      throw e
+    }
   }
 
   const addNotification = (notification) => {
