@@ -9,9 +9,8 @@
             <el-image 
               class="main-image"
               :src="currentImage" 
-              :preview-src-list="previewImageList"
               fit="cover"
-              :preview-teleported="true"
+              @click="handlePreviewOpen"
             >
               <template #error>
                 <div class="image-slot">
@@ -127,6 +126,12 @@
     </template>
 
     <el-empty v-else description="物品详情加载失败" />
+
+    <ImagePreview
+      v-model:visible="showPreview"
+      :images="previewImageList"
+      :initial-index="previewIndex"
+    />
   </div>
 </template>
 
@@ -140,6 +145,7 @@ import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
 import { useUserStore } from '@/stores/user'
 import { useHistoryStore } from '@/stores/history'
+import ImagePreview from '@/components/ImagePreview.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -153,6 +159,8 @@ const item = ref(null)
 const currentImage = ref('')
 const showOfferDialog = ref(false)
 const failedThumbnailIndices = ref(new Set())
+const showPreview = ref(false)
+const previewIndex = ref(0)
 
 const previewImageList = computed(() => {
   if (!item.value || !item.value.images) return [PLACEHOLDER_IMAGE]
@@ -220,6 +228,13 @@ const handleThumbnailClick = (img, index) => {
   } else {
     currentImage.value = img
   }
+}
+
+const handlePreviewOpen = () => {
+  const validImages = previewImageList.value
+  const idx = validImages.indexOf(currentImage.value)
+  previewIndex.value = idx >= 0 ? idx : 0
+  showPreview.value = true
 }
 
 const handleThumbnailError = (event, index) => {
