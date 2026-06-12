@@ -51,21 +51,82 @@
         </el-form-item>
 
         <el-form-item label="上传图片" prop="images">
-          <el-upload
-            ref="uploadRef"
-            :auto-upload="false"
-            :on-change="handleFileChange"
-            :on-remove="handleFileRemove"
-            :on-sort-change="handleSortChange"
-            :before-upload="beforeUpload"
-            list-type="picture-card"
-            :limit="9"
+          <div class="custom-uploader">
+            <TransitionGroup
+              tag="div"
+              name="image-list"
+              class="image-grid"
+              @dragover.prevent="handleGridDragOver"
+              @dragleave="handleGridDragLeave"
+            >
+              <div
+                v-for="(img, index) in displayList"
+                :key="img.uid"
+                class="image-item-wrapper"
+                :class="{ 
+                  'dragging': dragState.draggingUid === img.uid,
+                  'placeholder': dragState.placeholderIndex === index && !img.isAddButton,
+                  'placeholder-end': dragState.placeholderIndex === fileList.length && img.isAddButton
+                }"
+                :draggable="!img.isAddButton"
+                @dragstart="handleDragStart($event, index, img.uid)"
+                @dragend="handleDragEnd"
+                @dragover.prevent="handleDragOver($event, index, img.uid)"
+                @dragleave="handleDragLeave"
+                @drop.prevent="handleDrop"
+              >
+                <div
+                  v-if="img.isAddButton"
+                  class="add-image-btn"
+                  @click="triggerAddImage"
+                >
+                  <el-icon class="plus-icon"><Plus /></el-icon>
+                  <span class="add-text">添加图片</span>
+                </div>
+
+                <div v-else class="image-card">
+                  <img :src="img.url" class="image-preview" alt="" />
+                  
+                  <div class="index-badge">{{ index + 1 }}</div>
+                  
+                  <div v-if="index === 0" class="main-badge">
+                    <el-icon><Star /></el-icon>
+                    <span>主图</span>
+                  </div>
+
+                  <div class="image-actions">
+                    <el-tooltip content="替换图片" placement="top">
+                      <div class="action-btn replace-btn" @click.stop="triggerReplaceImage(index)">
+                        <el-icon><RefreshRight /></el-icon>
+                      </div>
+                    </el-tooltip>
+                    <el-tooltip content="删除图片" placement="top">
+                      <div class="action-btn delete-btn" @click.stop="handleRemoveImage(index)">
+                        <el-icon><Delete /></el-icon>
+                      </div>
+                    </el-tooltip>
+                  </div>
+                </div>
+              </div>
+            </TransitionGroup>
+            <div class="upload-tip">最多上传9张图片，第一张默认为主图，支持拖拽调整顺序</div>
+          </div>
+
+          <input
+            ref="addFileInputRef"
+            type="file"
             accept="image/*"
-            :file-list="fileList"
-          >
-            <el-icon><Plus /></el-icon>
-          </el-upload>
-          <div class="upload-tip">最多上传9张图片，支持拖拽排序</div>
+            multiple
+            class="hidden-file-input"
+            @change="handleAddFileChange"
+          />
+          <input
+            ref="replaceFileInputRef"
+            type="file"
+            accept="image/*"
+            class="hidden-file-input"
+            @change="handleReplaceFileChange"
+          />
         </el-form-item>
 
         <el-form-item>
@@ -83,9 +144,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, computed, reactive, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, Delete, RefreshRight, Star } from '@element-plus/icons-vue'
 import { compressImages } from '@/utils/imageCompressor'
 import api from '@/utils/api'
 import { useDraftStore } from '@/stores/draft'
@@ -96,12 +158,23 @@ const route = useRoute()
 const draftStore = useDraftStore()
 const userStore = useUserStore()
 const formRef = ref(null)
-const uploadRef = ref(null)
 const submitting = ref(false)
 const savingDraft = ref(false)
 const fileList = ref([])
 const editingDraftId = ref(null)
 let autoSaveTimer = null
+
+const addFileInputRef = ref(null)
+const replaceFileInputRef = ref(null)
+const replacingIndex = ref(-1)
+
+const dragState = reactive({
+  dragging: false,
+  draggingUid: null,
+  draggingIndex: -1,
+  overIndex: -1,
+  placeholderIndex: -1
+})
 
 const categories = ref([
   { id: 1, name: '数码家电' },
@@ -129,6 +202,14 @@ const rules = {
   images: [{ required: true, message: '请上传至少一张图片', trigger: 'change' }]
 }
 
+const displayList = computed(() => {
+  const list = [...fileList.value]
+  if (list.length < 9) {
+    list.push({ isAddButton: true, uid: 'add-btn' })
+  }
+  return list
+})
+
 const base64ToFile = (base64, filename = 'image.png') => {
   const arr = base64.split(',')
   const mime = arr[0].match(/:(.*?);/)[1]
@@ -140,6 +221,17 @@ const base64ToFile = (base64, filename = 'image.png') => {
   }
   return new File([u8arr], filename, { type: mime })
 }
+
+const fileToBase64 = (file) => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+const generateUid = () => `img_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 
 const setDraftId = (id) => {
   editingDraftId.value = id
@@ -171,7 +263,7 @@ const loadDraft = (draftId) => {
         name: `image_${index}`,
         url: url,
         raw: base64ToFile(url, `image_${index}.png`),
-        uid: `draft_${index}`
+        uid: `draft_${index}_${generateUid()}`
       }))
       syncImagesFromFileList()
     }
@@ -217,7 +309,7 @@ watch(
   { deep: true }
 )
 
-const beforeUpload = (file) => {
+const validateFile = (file) => {
   const isImage = file.type.startsWith('image/')
   if (!isImage) {
     ElMessage.error('只能上传图片文件!')
@@ -231,26 +323,216 @@ const beforeUpload = (file) => {
   return true
 }
 
-const handleFileChange = async (file, list) => {
-  if (file.raw) {
-    const compressed = await compressImages([file.raw])
-    list[list.length - 1].raw = compressed[0]
+const triggerAddImage = () => {
+  addFileInputRef.value && addFileInputRef.value.click()
+}
+
+const triggerReplaceImage = (index) => {
+  replacingIndex.value = index
+  replaceFileInputRef.value && replaceFileInputRef.value.click()
+}
+
+const handleAddFileChange = async (e) => {
+  const files = Array.from(e.target.files || [])
+  if (!files.length) return
+
+  const remainingSlots = 9 - fileList.value.length
+  if (remainingSlots <= 0) {
+    ElMessage.warning('最多只能上传9张图片')
+    e.target.value = ''
+    return
   }
-  fileList.value = [...list]
+
+  const validFiles = files.filter(validateFile).slice(0, remainingSlots)
+  if (!validFiles.length) {
+    e.target.value = ''
+    return
+  }
+
+  const compressed = await compressImages(validFiles)
+  const newItems = await Promise.all(
+    compressed.map(async (file, idx) => {
+      const url = await fileToBase64(file)
+      return {
+        name: `image_${Date.now()}_${idx}`,
+        url: url,
+        raw: file,
+        uid: generateUid()
+      }
+    })
+  )
+
+  fileList.value = [...fileList.value, ...newItems]
   syncImagesFromFileList()
   triggerAutoSave()
+  e.target.value = ''
 }
 
-const handleFileRemove = (file, list) => {
-  fileList.value = [...list]
+const handleReplaceFileChange = async (e) => {
+  const files = Array.from(e.target.files || [])
+  if (!files.length || replacingIndex.value < 0) {
+    replacingIndex.value = -1
+    e.target.value = ''
+    return
+  }
+
+  const file = files[0]
+  if (!validateFile(file)) {
+    replacingIndex.value = -1
+    e.target.value = ''
+    return
+  }
+
+  const compressed = await compressImages([file])
+  const url = await fileToBase64(compressed[0])
+
+  const newList = [...fileList.value]
+  newList[replacingIndex.value] = {
+    ...newList[replacingIndex.value],
+    name: `image_${Date.now()}`,
+    url: url,
+    raw: compressed[0],
+    uid: generateUid()
+  }
+  fileList.value = newList
   syncImagesFromFileList()
   triggerAutoSave()
+  replacingIndex.value = -1
+  e.target.value = ''
 }
 
-const handleSortChange = (list) => {
-  fileList.value = [...list]
+const handleRemoveImage = async (index) => {
+  try {
+    await ElMessageBox.confirm('确定要删除这张图片吗？', '提示', {
+      confirmButtonText: '确定',
+      cancelButtonText: '取消',
+      type: 'warning'
+    })
+    fileList.value.splice(index, 1)
+    fileList.value = [...fileList.value]
+    syncImagesFromFileList()
+    triggerAutoSave()
+  } catch {
+    // user cancelled
+  }
+}
+
+const handleDragStart = (e, index, uid) => {
+  const addBtn = displayList.value[index]
+  if (addBtn && addBtn.isAddButton) {
+    e.preventDefault()
+    return
+  }
+
+  dragState.dragging = true
+  dragState.draggingUid = uid
+  dragState.draggingIndex = index
+  dragState.overIndex = -1
+  dragState.placeholderIndex = index
+
+  try {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(index))
+    const target = e.currentTarget
+    if (target) {
+      e.dataTransfer.setDragImage(target, target.offsetWidth / 2, target.offsetHeight / 2)
+    }
+  } catch (err) {
+    // ignore drag image errors
+  }
+}
+
+const handleDragEnd = () => {
+  nextTick(() => {
+    dragState.dragging = false
+    dragState.draggingUid = null
+    dragState.draggingIndex = -1
+    dragState.overIndex = -1
+    dragState.placeholderIndex = -1
+  })
+}
+
+const handleDragOver = (e, index, uid) => {
+  if (!dragState.dragging) return
+  if (uid === dragState.draggingUid) return
+
+  const targetItem = displayList.value[index]
+
+  if (targetItem && targetItem.isAddButton) {
+    dragState.overIndex = index
+    dragState.placeholderIndex = fileList.value.length
+    return
+  }
+
+  const fromFileIndex = dragState.draggingIndex
+  const toFileIndex = index
+
+  const rect = e.currentTarget.getBoundingClientRect()
+  const cursorX = e.clientX - rect.left
+  const cursorY = e.clientY - rect.top
+
+  let insertAfter = false
+  if (rect.width > rect.height) {
+    insertAfter = cursorX > rect.width / 2
+  } else {
+    const inRightHalf = cursorX > rect.width / 2
+    const inBottomHalf = cursorY > rect.height / 2
+    insertAfter = inBottomHalf || (inRightHalf && Math.abs(cursorY - rect.height / 2) < rect.height * 0.3)
+  }
+
+  let insertIndex = toFileIndex
+  if (insertAfter) {
+    insertIndex = toFileIndex + 1
+  }
+
+  if (fromFileIndex < insertIndex) {
+    insertIndex = insertIndex - 1
+  }
+
+  dragState.overIndex = index
+  dragState.placeholderIndex = insertIndex
+}
+
+const handleDragLeave = () => {
+  // No-op: let next dragover update state
+}
+
+const handleGridDragOver = (e) => {
+  if (!dragState.dragging) return
+  e.dataTransfer.dropEffect = 'move'
+}
+
+const handleGridDragLeave = () => {
+  // No-op
+}
+
+const handleDrop = () => {
+  if (!dragState.dragging) return
+
+  const fromIndex = dragState.draggingIndex
+  let newIndex = dragState.placeholderIndex
+
+  if (fromIndex < 0) {
+    handleDragEnd()
+    return
+  }
+
+  const total = fileList.value.length
+  newIndex = Math.max(0, Math.min(newIndex, total - 1))
+
+  if (fromIndex === newIndex) {
+    handleDragEnd()
+    return
+  }
+
+  const newList = [...fileList.value]
+  const [movedItem] = newList.splice(fromIndex, 1)
+  newList.splice(newIndex, 0, movedItem)
+  fileList.value = newList
+
   syncImagesFromFileList()
   triggerAutoSave()
+  handleDragEnd()
 }
 
 const handleSaveDraft = async () => {
@@ -349,8 +631,254 @@ onBeforeUnmount(() => {
   margin-top: 8px;
 }
 
-:deep(.el-upload--picture-card) {
+.hidden-file-input {
+  display: none;
+}
+
+.custom-uploader {
+  width: 100%;
+}
+
+.image-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 4px;
+  border-radius: 8px;
+  min-height: 156px;
+  transition: background-color 0.2s ease;
+}
+
+.image-item-wrapper {
   width: 148px;
   height: 148px;
+  flex-shrink: 0;
+  position: relative;
+  transition: transform 0.35s cubic-bezier(0.4, 0, 0.2, 1),
+              opacity 0.2s ease,
+              box-shadow 0.2s ease;
+
+  &.dragging {
+    opacity: 0.4;
+    transform: scale(1.03);
+    z-index: 10;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  }
+
+  &.placeholder {
+    .image-card,
+    .add-image-btn {
+      visibility: hidden;
+    }
+
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(64, 158, 255, 0.25), rgba(64, 158, 255, 0.1));
+      border: 2px dashed rgba(64, 158, 255, 0.7);
+      border-radius: 8px;
+      pointer-events: none;
+      animation: placeholder-pulse 1.2s ease-in-out infinite;
+    }
+  }
+
+  &.placeholder-end {
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(103, 194, 58, 0.2), rgba(64, 158, 255, 0.15));
+      border: 2px dashed rgba(103, 194, 58, 0.6);
+      border-radius: 8px;
+      pointer-events: none;
+      animation: placeholder-pulse 1s ease-in-out infinite;
+    }
+  }
+}
+
+.image-list-move {
+  transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes placeholder-pulse {
+  0%, 100% {
+    opacity: 0.6;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.01);
+  }
+}
+
+.image-card {
+  width: 100%;
+  height: 100%;
+  border-radius: 8px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid #e4e7ed;
+  background: #f5f7fa;
+  cursor: grab;
+  transition: box-shadow 0.25s ease, transform 0.2s ease;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+
+  &:hover {
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+    transform: translateY(-2px);
+
+    .image-actions {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  &:active {
+    cursor: grabbing;
+  }
+}
+
+.image-preview {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.index-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 8px;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+  backdrop-filter: blur(4px);
+  user-select: none;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.main-badge {
+  position: absolute;
+  top: 0;
+  left: 0;
+  padding: 2px 10px 2px 8px;
+  background: linear-gradient(135deg, #f56c6c, #e64242);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border-bottom-right-radius: 10px;
+  box-shadow: 0 2px 6px rgba(245, 108, 108, 0.4);
+  user-select: none;
+  pointer-events: none;
+  z-index: 2;
+
+  .el-icon {
+    font-size: 12px;
+  }
+}
+
+.image-actions {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  display: flex;
+  gap: 6px;
+  opacity: 0;
+  transform: translateY(-6px);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 5;
+}
+
+.action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  transition: all 0.2s ease;
+
+  .el-icon {
+    font-size: 14px;
+    color: #fff;
+  }
+
+  &.replace-btn {
+    background: rgba(64, 158, 255, 0.85);
+
+    &:hover {
+      background: #409eff;
+      transform: scale(1.1);
+    }
+  }
+
+  &.delete-btn {
+    background: rgba(245, 108, 108, 0.85);
+
+    &:hover {
+      background: #f56c6c;
+      transform: scale(1.1);
+    }
+  }
+}
+
+.add-image-btn {
+  width: 100%;
+  height: 100%;
+  border: 2px dashed #dcdfe6;
+  border-radius: 8px;
+  background: #fafafa;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+
+  &:hover {
+    border-color: #409eff;
+    background: #ecf5ff;
+    transform: scale(1.02);
+
+    .plus-icon,
+    .add-text {
+      color: #409eff;
+    }
+  }
+
+  &:active {
+    transform: scale(0.98);
+  }
+}
+
+.plus-icon {
+  font-size: 36px;
+  color: #8c939d;
+  transition: color 0.2s ease;
+}
+
+.add-text {
+  font-size: 13px;
+  color: #8c939d;
+  transition: color 0.2s ease;
+}
+
+:deep(.el-tooltip__popper) {
+  font-size: 12px;
 }
 </style>
