@@ -39,15 +39,28 @@
             <div class="item-info">
               <div class="title-row">
                 <h1 class="item-title" :title="item.title">{{ item.title }}</h1>
-                <button
-                  class="favorite-btn"
-                  :class="{ favorited: isFavorited(item.id) }"
-                  @click.stop="handleToggleFavorite"
-                >
-                  <el-icon :size="28">
-                    <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
-                  </el-icon>
-                </button>
+                <div class="title-actions">
+                  <button
+                    class="like-btn"
+                    :class="{ liked: isLiked(item.id), disabled: isLikeLoading(item.id) }"
+                    :disabled="isLikeLoading(item.id)"
+                    @click.stop="handleLike"
+                  >
+                    <el-icon :size="24">
+                      <component :is="isLiked(item.id) ? 'StarFilled' : 'Star'" />
+                    </el-icon>
+                    <span class="like-count">{{ item.likeCount || 0 }}</span>
+                  </button>
+                  <button
+                    class="favorite-btn"
+                    :class="{ favorited: isFavorited(item.id) }"
+                    @click.stop="handleToggleFavorite"
+                  >
+                    <el-icon :size="28">
+                      <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
+                    </el-icon>
+                  </button>
+                </div>
               </div>
               
               <div class="item-meta">
@@ -139,10 +152,11 @@
 import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Picture } from '@element-plus/icons-vue'
+import { Picture, Star, StarFilled } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
+import { useLikeStore } from '@/stores/like'
 import { useUserStore } from '@/stores/user'
 import { useHistoryStore } from '@/stores/history'
 import ImagePreview from '@/components/ImagePreview.vue'
@@ -150,6 +164,7 @@ import ImagePreview from '@/components/ImagePreview.vue'
 const router = useRouter()
 const route = useRoute()
 const favoriteStore = useFavoriteStore()
+const likeStore = useLikeStore()
 const userStore = useUserStore()
 const historyStore = useHistoryStore()
 
@@ -181,6 +196,15 @@ const favoritedMap = computed(() => {
 })
 
 const isFavorited = (itemId) => favoritedMap.value.has(Number(itemId))
+
+const likedMap = computed(() => {
+  likeStore.updateVersion
+  return likeStore.likeIds
+})
+
+const isLiked = (itemId) => likedMap.value.has(Number(itemId))
+
+const isLikeLoading = (itemId) => likeStore.isLikeLoading(itemId)
 
 const canOffer = computed(() => {
   if (!item.value) return false
@@ -260,6 +284,20 @@ const handleToggleFavorite = async () => {
   }
 }
 
+const handleLike = async () => {
+  if (item.value) {
+    const result = await likeStore.toggleLike(item.value.id)
+    if (result !== undefined && item.value) {
+      item.value.liked = isLiked(item.value.id)
+      if (item.value.likeCount === undefined || item.value.likeCount === null) {
+        item.value.likeCount = 0
+      }
+      item.value.likeCount += result ? 1 : -1
+      if (item.value.likeCount < 0) item.value.likeCount = 0
+    }
+  }
+}
+
 const loadDetail = async () => {
   try {
     const params = {}
@@ -278,6 +316,9 @@ const loadDetail = async () => {
       }
       if (res.data.data.favorited) {
         favoriteStore.setItemFavorited(res.data.data.id, true)
+      }
+      if (res.data.data.liked) {
+        likeStore.setItemLiked(res.data.data.id, true)
       }
       historyStore.addHistory(res.data.data)
     }
@@ -444,6 +485,13 @@ onMounted(() => {
     gap: 16px;
   }
 
+  .title-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+
   .item-title {
     font-size: 28px;
     font-weight: 600;
@@ -454,6 +502,45 @@ onMounted(() => {
     word-break: break-word;
     overflow-wrap: break-word;
     line-height: 1.4;
+  }
+
+  .like-btn {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 8px 12px;
+    border-radius: 20px;
+    transition: all 0.3s;
+    color: #909399;
+    font-size: 14px;
+
+    &:hover:not(.disabled) {
+      color: #e6a23c;
+      background: #fdf6ec;
+    }
+
+    &.liked {
+      color: #e6a23c;
+
+      &:hover {
+        background: #fef0f0;
+        color: #f56c6c;
+      }
+    }
+
+    &.disabled {
+      cursor: not-allowed;
+      opacity: 0.6;
+    }
+
+    .like-count {
+      font-weight: 500;
+      min-width: 16px;
+      text-align: center;
+    }
   }
 
   .favorite-btn {

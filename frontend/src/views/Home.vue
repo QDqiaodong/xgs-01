@@ -47,6 +47,19 @@
               <span class="item-condition">{{ item.condition }}</span>
               <span class="item-time">{{ item.createTime }}</span>
             </div>
+            <div class="item-actions" v-if="!item._isMock">
+              <button
+                class="card-like-btn"
+                :class="{ liked: isLiked(item.id), disabled: isLikeLoading(item.id) }"
+                :disabled="isLikeLoading(item.id)"
+                @click.stop="handleLike(item)"
+              >
+                <el-icon :size="16">
+                  <component :is="isLiked(item.id) ? 'StarFilled' : 'Star'" />
+                </el-icon>
+                <span class="like-count">{{ item.likeCount || 0 }}</span>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -105,14 +118,17 @@
 <script setup>
 import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
+import { Star, StarFilled } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
+import { useLikeStore } from '@/stores/like'
 import { useUserStore } from '@/stores/user'
 import { useHistoryStore } from '@/stores/history'
 
 const router = useRouter()
 const favoriteStore = useFavoriteStore()
+const likeStore = useLikeStore()
 const userStore = useUserStore()
 const historyStore = useHistoryStore()
 
@@ -136,6 +152,27 @@ const toggleFavorite = async (item) => {
   const result = await favoriteStore.toggleFavorite(item.id)
   if (result !== undefined) {
     item.favorited = isFavorited(item.id)
+  }
+}
+
+const likedMap = computed(() => {
+  likeStore.updateVersion
+  return likeStore.likeIds
+})
+
+const isLiked = (itemId) => likedMap.value.has(Number(itemId))
+
+const isLikeLoading = (itemId) => likeStore.isLikeLoading(itemId)
+
+const handleLike = async (item) => {
+  const result = await likeStore.toggleLike(item.id)
+  if (result !== undefined) {
+    item.liked = isLiked(item.id)
+    if (item.likeCount === undefined || item.likeCount === null) {
+      item.likeCount = 0
+    }
+    item.likeCount += result ? 1 : -1
+    if (item.likeCount < 0) item.likeCount = 0
   }
 }
 
@@ -209,6 +246,7 @@ onMounted(async () => {
     if (res.data.success) {
       topItems.value = res.data.data
       favoriteStore.setFavoritedFromItems(res.data.data)
+      likeStore.setLikedFromItems(res.data.data)
     }
   } catch (e) {
     console.log('使用模拟数据')
@@ -217,6 +255,57 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
+.item-card {
+  .item-content {
+    .item-actions {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+    }
+
+    .card-like-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: #909399;
+      font-size: 13px;
+      transition: all 0.2s;
+
+      &:hover:not(.disabled) {
+        color: #e6a23c;
+        background: #fdf6ec;
+      }
+
+      &.liked {
+        color: #e6a23c;
+
+        &:hover {
+          background: #fef0f0;
+          color: #f56c6c;
+        }
+      }
+
+      &.disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      .like-count {
+        font-weight: 500;
+        min-width: 16px;
+        text-align: center;
+      }
+    }
+  }
+}
+
 .hero-section {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border-radius: 16px;

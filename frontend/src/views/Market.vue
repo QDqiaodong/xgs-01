@@ -129,6 +129,19 @@
             <span class="item-condition">{{ item.condition }}</span>
             <span class="item-time">{{ item.createTime }}</span>
           </div>
+          <div class="item-actions" v-if="!item._isMock">
+            <button
+              class="card-like-btn"
+              :class="{ liked: isLiked(item.id), disabled: isLikeLoading(item.id) }"
+              :disabled="isLikeLoading(item.id)"
+              @click.stop="handleLike(item)"
+            >
+              <el-icon :size="16">
+                <component :is="isLiked(item.id) ? 'StarFilled' : 'Star'" />
+              </el-icon>
+              <span class="like-count">{{ item.likeCount || 0 }}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -146,10 +159,11 @@
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { Loading, Search, ArrowDown, ArrowUp, RefreshRight } from '@element-plus/icons-vue'
+import { Loading, Search, ArrowDown, ArrowUp, RefreshRight, Star, StarFilled } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
+import { useLikeStore } from '@/stores/like'
 import { useUserStore } from '@/stores/user'
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgNDAwIDMwMCI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IiNmNWY3ZmEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE2IiBmaWxsPSIjYzBjNGNjIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Liq5pWl5aSn5pWwPC90ZXh0Pjwvc3ZnPg=='
@@ -161,6 +175,7 @@ const handleImageError = (e) => {
 const router = useRouter()
 const route = useRoute()
 const favoriteStore = useFavoriteStore()
+const likeStore = useLikeStore()
 const userStore = useUserStore()
 
 const favoritedMap = computed(() => {
@@ -174,6 +189,27 @@ const toggleFavorite = async (item) => {
   const result = await favoriteStore.toggleFavorite(item.id)
   if (result !== undefined) {
     item.favorited = isFavorited(item.id)
+  }
+}
+
+const likedMap = computed(() => {
+  likeStore.updateVersion
+  return likeStore.likeIds
+})
+
+const isLiked = (itemId) => likedMap.value.has(Number(itemId))
+
+const isLikeLoading = (itemId) => likeStore.isLikeLoading(itemId)
+
+const handleLike = async (item) => {
+  const result = await likeStore.toggleLike(item.id)
+  if (result !== undefined) {
+    item.liked = isLiked(item.id)
+    if (item.likeCount === undefined || item.likeCount === null) {
+      item.likeCount = 0
+    }
+    item.likeCount += result ? 1 : -1
+    if (item.likeCount < 0) item.likeCount = 0
   }
 }
 
@@ -334,6 +370,7 @@ const handleSearch = async () => {
       total.value = res.data.data.total
       noMore.value = items.value.length >= total.value
       favoriteStore.setFavoritedFromItems(res.data.data.list)
+      likeStore.setLikedFromItems(res.data.data.list)
     }
   } catch (e) {
     items.value = mockItems(1, filterForm.value.size)
@@ -369,6 +406,7 @@ const loadMore = async () => {
         noMore.value = true
       }
       favoriteStore.setFavoritedFromItems(newList)
+      likeStore.setLikedFromItems(newList)
     }
   } catch (e) {
     const newList = mockItems(filterForm.value.page, filterForm.value.size)
@@ -419,6 +457,57 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+.item-card {
+  .item-content {
+    .item-actions {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f0f0f0;
+      display: flex;
+      align-items: center;
+    }
+
+    .card-like-btn {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 4px;
+      color: #909399;
+      font-size: 13px;
+      transition: all 0.2s;
+
+      &:hover:not(.disabled) {
+        color: #e6a23c;
+        background: #fdf6ec;
+      }
+
+      &.liked {
+        color: #e6a23c;
+
+        &:hover {
+          background: #fef0f0;
+          color: #f56c6c;
+        }
+      }
+
+      &.disabled {
+        cursor: not-allowed;
+        opacity: 0.6;
+      }
+
+      .like-count {
+        font-weight: 500;
+        min-width: 16px;
+        text-align: center;
+      }
+    }
+  }
+}
+
 .load-more {
   display: flex;
   justify-content: center;

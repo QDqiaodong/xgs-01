@@ -11,6 +11,7 @@
             <el-menu :default-active="activeMenu" mode="horizontal" @select="handleMenuSelect">
               <el-menu-item index="/">首页</el-menu-item>
               <el-menu-item index="/market">物品市集</el-menu-item>
+              <el-menu-item index="/ranking">点赞排行</el-menu-item>
               <el-menu-item index="/publish">发布闲置</el-menu-item>
               <el-menu-item index="/my">我的库房</el-menu-item>
             </el-menu>
@@ -143,6 +144,7 @@ import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useUserStore } from '@/stores/user'
 import { useFavoriteStore } from '@/stores/favorite'
+import { useLikeStore } from '@/stores/like'
 import { useNotificationStore, NOTIFICATION_TYPES } from '@/stores/notification'
 import { ElMessage } from 'element-plus'
 
@@ -150,6 +152,7 @@ const route = useRoute()
 const router = useRouter()
 const userStore = useUserStore()
 const favoriteStore = useFavoriteStore()
+const likeStore = useLikeStore()
 const notificationStore = useNotificationStore()
 
 const showLogin = ref(false)
@@ -174,6 +177,7 @@ const handleLogin = async () => {
     showLogin.value = false
     ElMessage.success('登录成功')
     favoriteStore.loadFavorites()
+    likeStore.clearLikes()
     notificationStore.loadNotifications()
   } else {
     ElMessage.error('登录失败，用户名或密码错误')
@@ -184,6 +188,7 @@ const handleUserCommand = (command) => {
   if (command === 'logout') {
     userStore.logout()
     favoriteStore.loadFavorites()
+    likeStore.clearLikes()
     notificationStore.clear()
     ElMessage.success('已退出登录')
     router.push('/')
