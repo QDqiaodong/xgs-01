@@ -48,6 +48,7 @@ public class ItemService {
     private final ItemLikeMapper itemLikeMapper;
     private final FileStorageService fileStorageService;
     private final RedisTemplate<String, Object> redisTemplate;
+    private final ViewCountService viewCountService;
 
     private static final String TOP_ITEMS_KEY = "swap:items:top";
 
@@ -127,9 +128,6 @@ public class ItemService {
         Item item = itemMapper.selectById(id);
         if (item != null) {
             enrichItems(List.of(item));
-            
-            item.setViewCount(item.getViewCount() + 1);
-            itemMapper.updateById(item);
         }
         return item;
     }
@@ -330,9 +328,13 @@ public class ItemService {
     }
 
     public Item getDetail(Long id, Long userId) {
-        Item item = getDetail(id);
-        if (item != null && userId != null) {
-            enrichItems(List.of(item), userId);
+        Item item = itemMapper.selectById(id);
+        if (item != null) {
+            enrichItems(List.of(item));
+            if (userId != null) {
+                enrichItems(List.of(item), userId);
+            }
+            viewCountService.recordView(id, userId);
         }
         return item;
     }
