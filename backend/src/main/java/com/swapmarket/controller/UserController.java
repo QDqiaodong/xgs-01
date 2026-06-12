@@ -1,8 +1,11 @@
 package com.swapmarket.controller;
 
 import com.swapmarket.common.Result;
+import com.swapmarket.dto.UserRegisterDTO;
 import com.swapmarket.entity.User;
 import com.swapmarket.service.UserService;
+import com.swapmarket.vo.UserVO;
+import jakarta.validation.Valid;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -14,6 +17,12 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class UserController {
     private final UserService userService;
+
+    @PostMapping("/register")
+    public Result<UserVO> register(@Valid @RequestBody UserRegisterDTO dto) {
+        UserVO userVO = userService.register(dto);
+        return Result.success(userVO);
+    }
 
     @PostMapping("/login")
     public Result<Map<String, Object>> login(@RequestBody LoginRequest request) {
