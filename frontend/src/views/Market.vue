@@ -163,12 +163,17 @@ const route = useRoute()
 const favoriteStore = useFavoriteStore()
 const userStore = useUserStore()
 
-const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
+const favoritedMap = computed(() => {
+  favoriteStore.updateVersion
+  return favoriteStore.favoriteIds
+})
+
+const isFavorited = (itemId) => favoritedMap.value.has(Number(itemId))
 
 const toggleFavorite = async (item) => {
   const result = await favoriteStore.toggleFavorite(item.id)
   if (result !== undefined) {
-    item.favorited = favoriteStore.isFavorited(item.id)
+    item.favorited = isFavorited(item.id)
   }
 }
 

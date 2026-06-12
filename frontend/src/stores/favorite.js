@@ -8,6 +8,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
   const favoriteIdList = ref([])
   const favoriteItems = ref([])
   const loading = ref(false)
+  const updateVersion = ref(0)
 
   const userStore = useUserStore()
 
@@ -17,10 +18,15 @@ export const useFavoriteStore = defineStore('favorite', () => {
     return favoriteIdList.value.includes(Number(itemId))
   }
 
+  const touchUpdate = () => {
+    updateVersion.value++
+  }
+
   const addId = (id) => {
     const numId = Number(id)
     if (!favoriteIdList.value.includes(numId)) {
       favoriteIdList.value.push(numId)
+      touchUpdate()
     }
   }
 
@@ -29,6 +35,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
     const idx = favoriteIdList.value.indexOf(numId)
     if (idx > -1) {
       favoriteIdList.value.splice(idx, 1)
+      touchUpdate()
     }
   }
 
@@ -70,6 +77,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
       if (res.data.success) {
         favoriteItems.value = res.data.data
         favoriteIdList.value = res.data.data.map(item => Number(item.id))
+        touchUpdate()
       }
     } catch (e) {
       console.log('加载收藏列表失败')
@@ -99,6 +107,7 @@ export const useFavoriteStore = defineStore('favorite', () => {
     favoriteIdList,
     favoriteItems,
     loading,
+    updateVersion,
     isFavorited,
     toggleFavorite,
     loadFavorites,

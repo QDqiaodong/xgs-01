@@ -175,7 +175,12 @@ const offerForm = ref({
 
 const myItems = ref([])
 
-const isFavorited = (itemId) => favoriteStore.isFavorited(itemId)
+const favoritedMap = computed(() => {
+  favoriteStore.updateVersion
+  return favoriteStore.favoriteIds
+})
+
+const isFavorited = (itemId) => favoritedMap.value.has(Number(itemId))
 
 const canOffer = computed(() => {
   if (!item.value) return false
@@ -249,8 +254,8 @@ const handleThumbnailError = (event, index) => {
 const handleToggleFavorite = async () => {
   if (item.value) {
     const result = await favoriteStore.toggleFavorite(item.value.id)
-    if (result !== false && item.value) {
-      item.value.favorited = favoriteStore.isFavorited(item.value.id)
+    if (result !== undefined && item.value) {
+      item.value.favorited = isFavorited(item.value.id)
     }
   }
 }

@@ -120,10 +120,13 @@
             @click="goDetail(item.id)"
           >
             <button
-              class="card-favorite-btn favorited"
+              class="card-favorite-btn"
+              :class="{ favorited: isFavorited(item.id) }"
               @click.stop="removeFromFavorites(item)"
             >
-              <el-icon :size="20"><HeartFilled /></el-icon>
+              <el-icon :size="20">
+                <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
+              </el-icon>
             </button>
             <img :src="item.images?.[0] || PLACEHOLDER_IMAGE" class="item-image" @error="handleImageError" />
             <div class="item-content">
@@ -223,10 +226,21 @@ const draftStore = useDraftStore()
 const activeTab = ref('drafts')
 const showEditDialog = ref(false)
 const editForm = ref({})
-const favoriteLoading = ref(false)
+const favoriteLoading = computed(() => favoriteStore.loading)
 const publishingDraftId = ref(null)
 
-const favoriteItems = ref([])
+const favoritedMap = computed(() => {
+  favoriteStore.updateVersion
+  return favoriteStore.favoriteIds
+})
+
+const isFavorited = (itemId) => favoritedMap.value.has(Number(itemId))
+
+const favoriteItems = computed(() => {
+  favoriteStore.updateVersion
+  return favoriteStore.favoriteItems
+})
+
 const historyList = computed(() => historyStore.historyList)
 const draftList = computed(() => draftStore.draftList)
 const formatBrowseTime = (timestamp) => historyStore.formatBrowseTime(timestamp)
@@ -377,14 +391,10 @@ watch(activeTab, (newVal) => {
 })
 
 const loadFavorites = async () => {
-  favoriteLoading.value = true
   try {
     await favoriteStore.loadFavorites()
-    favoriteItems.value = [...favoriteStore.favoriteItems]
   } catch (e) {
     console.log('加载收藏列表失败')
-  } finally {
-    favoriteLoading.value = false
   }
 }
 
@@ -396,11 +406,7 @@ const removeFromFavorites = async (item) => {
       type: 'warning'
     })
     await favoriteStore.toggleFavorite(item.id)
-    favoriteItems.value = favoriteItems.value.filter(i => Number(i.id) !== Number(item.id))
   } catch (e) {
-    if (e !== 'cancel') {
-      favoriteItems.value = favoriteItems.value.filter(i => Number(i.id) !== Number(item.id))
-    }
   }
 }
 
