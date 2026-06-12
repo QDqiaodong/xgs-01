@@ -2,6 +2,7 @@ package com.swapmarket.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
+import com.swapmarket.common.CacheKeyConstants;
 import com.swapmarket.common.PageResult;
 import com.swapmarket.entity.Category;
 import com.swapmarket.entity.Favorite;
@@ -14,28 +15,20 @@ import com.swapmarket.mapper.ItemImageMapper;
 import com.swapmarket.mapper.ItemLikeMapper;
 import com.swapmarket.mapper.ItemMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
-import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.time.DayOfWeek;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.format.DateTimeFormatter;
 import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -47,13 +40,11 @@ public class ItemService {
     private final FavoriteMapper favoriteMapper;
     private final ItemLikeMapper itemLikeMapper;
     private final FileStorageService fileStorageService;
-    private final RedisTemplate<String, Object> redisTemplate;
+    private final RedisCacheService redisCacheService;
     private final ViewCountService viewCountService;
 
-    private static final String TOP_ITEMS_KEY = "swap:items:top";
-
     public List<Item> getTopItems() {
-        List<Item> cached = (List<Item>) redisTemplate.opsForValue().get(TOP_ITEMS_KEY);
+        List<Item> cached = redisCacheService.getList(CacheKeyConstants.TOP_ITEMS_KEY, Item.class);
         if (cached != null) {
             return cached;
         }
@@ -66,7 +57,8 @@ public class ItemService {
         
         enrichItems(items);
         
-        redisTemplate.opsForValue().set(TOP_ITEMS_KEY, items, 1, TimeUnit.HOURS);
+        redisCacheService.set(CacheKeyConstants.TOP_ITEMS_KEY, items,
+                CacheKeyConstants.TOP_ITEMS_TTL, CacheKeyConstants.TOP_ITEMS_TTL_UNIT);
         return items;
     }
 
@@ -125,9 +117,17 @@ public class ItemService {
     }
 
     public Item getDetail(Long id) {
+        String cacheKey = CacheKeyConstants.ITEM_DETAIL_KEY + id;
+        Item cached = redisCacheService.getObject(cacheKey, Item.class);
+        if (cached != null) {
+            return cached;
+        }
+
         Item item = itemMapper.selectById(id);
         if (item != null) {
             enrichItems(List.of(item));
+            redisCacheService.set(cacheKey, item,
+                    CacheKeyConstants.ITEM_DETAIL_TTL, CacheKeyConstants.ITEM_DETAIL_TTL_UNIT);
         }
         return item;
     }
@@ -160,7 +160,7 @@ public class ItemService {
             }
         }
 
-        redisTemplate.delete(TOP_ITEMS_KEY);
+        clearItemRelatedCaches(item.getId());
         return item;
     }
 
@@ -170,7 +170,7 @@ public class ItemService {
         if (item != null && item.getUserId().equals(userId)) {
             item.setStatus("offline");
             itemMapper.updateById(item);
-            redisTemplate.delete(TOP_ITEMS_KEY);
+            clearItemRelatedCaches(id);
         }
     }
 
@@ -180,7 +180,7 @@ public class ItemService {
         if (item != null && item.getUserId().equals(userId)) {
             item.setStatus("published");
             itemMapper.updateById(item);
-            redisTemplate.delete(TOP_ITEMS_KEY);
+            clearItemRelatedCaches(id);
         }
     }
 
@@ -361,6 +361,8 @@ public class ItemService {
 
         item.setLikeCount(item.getLikeCount() == null ? 1 : item.getLikeCount() + 1);
         itemMapper.updateById(item);
+
+        clearItemRelatedCaches(itemId);
     }
 
     @Transactional
@@ -383,20 +385,42 @@ public class ItemService {
             item.setLikeCount(item.getLikeCount() - 1);
             itemMapper.updateById(item);
         }
+
+        clearItemRelatedCaches(itemId);
     }
 
     public List<Item> getLikeRanking(int limit, Long userId) {
+        String cacheKey = CacheKeyConstants.LIKE_RANKING_KEY + ":" + limit;
+        List<Item> cached = redisCacheService.getList(cacheKey, Item.class);
+        if (cached != null) {
+            if (userId != null) {
+                enrichItems(cached, userId);
+            }
+            return cached;
+        }
+
         List<Item> items = itemMapper.selectList(new LambdaQueryWrapper<Item>()
                 .eq(Item::getStatus, "published")
                 .orderByDesc(Item::getLikeCount)
                 .orderByDesc(Item::getCreateTime)
                 .last("LIMIT " + Math.min(limit, 100)));
 
+        enrichItems(items);
+
+        redisCacheService.set(cacheKey, items,
+                CacheKeyConstants.LIKE_RANKING_TTL, CacheKeyConstants.LIKE_RANKING_TTL_UNIT);
+
         if (userId != null) {
             enrichItems(items, userId);
-        } else {
-            enrichItems(items);
         }
         return items;
+    }
+
+    private void clearItemRelatedCaches(Long itemId) {
+        if (itemId != null) {
+            redisCacheService.delete(CacheKeyConstants.ITEM_DETAIL_KEY + itemId);
+        }
+        redisCacheService.delete(CacheKeyConstants.TOP_ITEMS_KEY);
+        redisCacheService.deleteByPattern(CacheKeyConstants.LIKE_RANKING_KEY + "*");
     }
 }

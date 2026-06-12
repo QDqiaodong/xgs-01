@@ -1,6 +1,7 @@
 package com.swapmarket.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.swapmarket.common.CacheKeyConstants;
 import com.swapmarket.entity.Item;
 import com.swapmarket.entity.ItemImage;
 import com.swapmarket.entity.SwapOffer;
@@ -10,12 +11,10 @@ import com.swapmarket.mapper.ItemMapper;
 import com.swapmarket.mapper.SwapOfferMapper;
 import com.swapmarket.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 @Service
@@ -26,9 +25,7 @@ public class SwapOfferService {
     private final ItemImageMapper itemImageMapper;
     private final UserMapper userMapper;
     private final NotificationService notificationService;
-    private final RedisTemplate<String, Object> redisTemplate;
-
-    private static final String PENDING_OFFERS_KEY = "swap:offers:pending:";
+    private final RedisCacheService redisCacheService;
 
     @Transactional
     public SwapOffer createOffer(Long fromUserId, Long fromItemId, Long toItemId, String message) {
@@ -79,13 +76,13 @@ public class SwapOfferService {
                 toItem.getTitle()
         );
 
-        redisTemplate.delete(PENDING_OFFERS_KEY + toItem.getUserId());
+        clearUserOfferCaches(toItem.getUserId());
         return offer;
     }
 
     public List<SwapOffer> getReceivedOffers(Long userId) {
-        String key = PENDING_OFFERS_KEY + userId;
-        List<SwapOffer> cached = (List<SwapOffer>) redisTemplate.opsForValue().get(key);
+        String key = CacheKeyConstants.USER_PENDING_OFFERS_KEY + userId;
+        List<SwapOffer> cached = redisCacheService.getList(key, SwapOffer.class);
         if (cached != null) {
             return cached;
         }
@@ -96,7 +93,8 @@ public class SwapOfferService {
 
         enrichOffers(offers);
 
-        redisTemplate.opsForValue().set(key, offers, 30, TimeUnit.MINUTES);
+        redisCacheService.set(key, offers,
+                CacheKeyConstants.USER_PENDING_OFFERS_TTL, CacheKeyConstants.USER_PENDING_OFFERS_TTL_UNIT);
         return offers;
     }
 
@@ -136,7 +134,8 @@ public class SwapOfferService {
                 toItem != null ? toItem.getTitle() : ""
         );
 
-        redisTemplate.delete(PENDING_OFFERS_KEY + userId);
+        clearUserOfferCaches(userId);
+        clearUserOfferCaches(offer.getFromUserId());
     }
 
     @Transactional
@@ -159,7 +158,8 @@ public class SwapOfferService {
                 toItem != null ? toItem.getTitle() : ""
         );
         
-        redisTemplate.delete(PENDING_OFFERS_KEY + userId);
+        clearUserOfferCaches(userId);
+        clearUserOfferCaches(offer.getFromUserId());
     }
 
     public SwapOffer getOfferDetail(Long userId, Long offerId) {
@@ -215,5 +215,30 @@ public class SwapOfferService {
             offer.setToItem(itemMap.get(offer.getToItemId()));
             offer.setFromUser(userMap.get(offer.getFromUserId()));
         }
+    }
+
+    public int getPendingOfferCount(Long userId) {
+        String countKey = CacheKeyConstants.USER_OFFER_COUNT_KEY + userId;
+        Object cached = redisCacheService.get(countKey);
+        if (cached != null) {
+            return ((Number) cached).intValue();
+        }
+
+        long count = swapOfferMapper.selectCount(new LambdaQueryWrapper<SwapOffer>()
+                .eq(SwapOffer::getToUserId, userId)
+                .eq(SwapOffer::getStatus, "pending"));
+
+        int result = (int) count;
+        redisCacheService.set(countKey, result,
+                CacheKeyConstants.USER_OFFER_COUNT_TTL, CacheKeyConstants.USER_OFFER_COUNT_TTL_UNIT);
+        return result;
+    }
+
+    private void clearUserOfferCaches(Long userId) {
+        if (userId == null) {
+            return;
+        }
+        redisCacheService.delete(CacheKeyConstants.USER_PENDING_OFFERS_KEY + userId);
+        redisCacheService.delete(CacheKeyConstants.USER_OFFER_COUNT_KEY + userId);
     }
 }

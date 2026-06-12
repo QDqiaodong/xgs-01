@@ -61,6 +61,11 @@ public class OfferController {
         return Result.success(swapOfferService.getOfferDetail(userId, id));
     }
 
+    @GetMapping("/pending-count")
+    public Result<Integer> getPendingOfferCount(@RequestParam(defaultValue = "1") Long userId) {
+        return Result.success(swapOfferService.getPendingOfferCount(userId));
+    }
+
     @Data
     public static class CreateOfferRequest {
         private Long fromUserId = 1L;
