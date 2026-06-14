@@ -104,6 +104,16 @@
                   <el-icon><Message /></el-icon>
                   私信
                 </el-button>
+                <el-button 
+                  size="large" 
+                  type="danger" 
+                  plain
+                  :disabled="!canReport"
+                  @click="handleOpenReportDialog"
+                >
+                  <el-icon><Warning /></el-icon>
+                  {{ reportButtonText }}
+                </el-button>
               </div>
             </div>
           </el-col>
@@ -136,6 +146,48 @@
           <el-button type="primary" @click="submitOffer">发送邀约</el-button>
         </template>
       </el-dialog>
+
+      <el-dialog v-model="showReportDialog" title="举报物品" width="500px">
+        <el-form :model="reportForm" label-width="100px">
+          <el-form-item label="举报原因" required>
+            <el-select v-model="reportForm.reasonType" placeholder="请选择举报原因">
+              <el-option label="虚假信息" value="fake_info" />
+              <el-option label="违禁物品" value="prohibited" />
+              <el-option label="重复发布" value="duplicate" />
+              <el-option label="图片与实物不符" value="image_mismatch" />
+              <el-option label="欺诈行为" value="fraud" />
+              <el-option label="其他原因" value="other" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="详细描述">
+            <el-input 
+              v-model="reportForm.description" 
+              type="textarea" 
+              :rows="4"
+              placeholder="请详细描述举报原因（选填）"
+              :maxlength="500"
+              show-word-limit
+            />
+          </el-form-item>
+          <el-form-item label="图片证据">
+            <el-upload
+              v-model:file-list="reportForm.imageFiles"
+              action=""
+              :auto-upload="false"
+              list-type="picture-card"
+              accept="image/*"
+              :limit="3"
+              :on-exceed="() => ElMessage.warning('最多上传3张图片')"
+            >
+              <el-icon><Plus /></el-icon>
+            </el-upload>
+          </el-form-item>
+        </el-form>
+        <template #footer>
+          <el-button @click="showReportDialog = false">取消</el-button>
+          <el-button type="danger" @click="submitReport" :loading="reportSubmitting">提交举报</el-button>
+        </template>
+      </el-dialog>
     </template>
 
     <el-empty v-else description="物品详情加载失败" />
@@ -153,6 +205,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Picture, Star, StarFilled } from '@element-plus/icons-vue'
+import { Plus } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
@@ -176,6 +229,14 @@ const showOfferDialog = ref(false)
 const failedThumbnailIndices = ref(new Set())
 const showPreview = ref(false)
 const previewIndex = ref(0)
+const showReportDialog = ref(false)
+const reportSubmitting = ref(false)
+
+const reportForm = ref({
+  reasonType: '',
+  description: '',
+  imageFiles: []
+})
 
 const previewImageList = computed(() => {
   if (!item.value || !item.value.images) return [PLACEHOLDER_IMAGE]
@@ -402,6 +463,76 @@ const submitOffer = async () => {
     }
   } catch (e) {
     ElMessage.error('发送失败，请稍后重试')
+  }
+}
+
+const canReport = computed(() => {
+  if (!item.value) return false
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) return false
+  if (item.value.userId === userStore.userInfo.id) return false
+  return true
+})
+
+const reportButtonText = computed(() => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) return '请先登录'
+  if (item.value && item.value.userId === userStore.userInfo.id) return '不能举报自己的物品'
+  return '举报'
+})
+
+const handleOpenReportDialog = () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  if (!item.value) {
+    ElMessage.warning('物品信息加载失败')
+    return
+  }
+  if (item.value.userId === userStore.userInfo.id) {
+    ElMessage.warning('不能举报自己的物品')
+    return
+  }
+  reportForm.value = { reasonType: '', description: '', imageFiles: [] }
+  showReportDialog.value = true
+}
+
+const submitReport = async () => {
+  if (!reportForm.value.reasonType) {
+    ElMessage.warning('请选择举报原因')
+    return
+  }
+  if (!item.value) return
+  reportSubmitting.value = true
+  try {
+    const formData = new FormData()
+    formData.append('userId', userStore.userInfo.id)
+    formData.append('itemId', item.value.id)
+    formData.append('reasonType', reportForm.value.reasonType)
+    if (reportForm.value.description) {
+      formData.append('description', reportForm.value.description)
+    }
+    if (reportForm.value.imageFiles && reportForm.value.imageFiles.length > 0) {
+      for (const file of reportForm.value.imageFiles) {
+        if (file.raw) {
+          formData.append('images', file.raw)
+        }
+      }
+    }
+    const res = await api.post('/report/submit', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    })
+    if (res.data.success) {
+      ElMessage.success('举报已提交，我们会尽快处理')
+      showReportDialog.value = false
+    }
+  } catch (e) {
+    if (e.response?.data?.message) {
+      ElMessage.error(e.response.data.message)
+    } else {
+      ElMessage.error('提交举报失败，请稍后重试')
+    }
+  } finally {
+    reportSubmitting.value = false
   }
 }
 

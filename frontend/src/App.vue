@@ -12,6 +12,7 @@
               <el-menu-item index="/">首页</el-menu-item>
               <el-menu-item index="/market">物品市集</el-menu-item>
               <el-menu-item index="/ranking">点赞排行</el-menu-item>
+              <el-menu-item index="/reports">举报管理</el-menu-item>
               <el-menu-item index="/publish">发布闲置</el-menu-item>
               <el-menu-item index="/my">我的库房</el-menu-item>
             </el-menu>

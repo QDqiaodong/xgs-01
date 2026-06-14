@@ -109,6 +109,25 @@ CREATE TABLE IF NOT EXISTS notification (
     INDEX idx_notification_create_time(create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS report (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    item_id BIGINT NOT NULL,
+    user_id BIGINT NOT NULL,
+    reason_type VARCHAR(50) NOT NULL,
+    description TEXT,
+    images TEXT,
+    status VARCHAR(20) DEFAULT 'pending',
+    handler_id BIGINT,
+    handle_remark VARCHAR(500),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    deleted TINYINT DEFAULT 0,
+    INDEX idx_report_item_id(item_id),
+    INDEX idx_report_user_id(user_id),
+    INDEX idx_report_status(status),
+    INDEX idx_report_create_time(create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT IGNORE INTO category (id, name, icon, sort_order) VALUES
 (1, '数码家电', 'Monitor', 1),
 (2, '图书文具', 'Reading', 2),

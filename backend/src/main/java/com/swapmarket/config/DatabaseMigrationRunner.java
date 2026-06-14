@@ -65,12 +65,40 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             {"idx_item_id", "CREATE INDEX idx_item_id ON item_like(item_id)"}
     };
 
+    private static final String REPORT_TABLE_DDL =
+            "CREATE TABLE IF NOT EXISTS report (" +
+            "  id BIGINT PRIMARY KEY AUTO_INCREMENT," +
+            "  item_id BIGINT NOT NULL," +
+            "  user_id BIGINT NOT NULL," +
+            "  reason_type VARCHAR(50) NOT NULL," +
+            "  description TEXT," +
+            "  images TEXT," +
+            "  status VARCHAR(20) DEFAULT 'pending'," +
+            "  handler_id BIGINT," +
+            "  handle_remark VARCHAR(500)," +
+            "  create_time DATETIME DEFAULT CURRENT_TIMESTAMP," +
+            "  update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP," +
+            "  deleted TINYINT DEFAULT 0," +
+            "  INDEX idx_report_item_id(item_id)," +
+            "  INDEX idx_report_user_id(user_id)," +
+            "  INDEX idx_report_status(status)," +
+            "  INDEX idx_report_create_time(create_time)" +
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    private static final String[][] REPORT_INDEXES = {
+            {"idx_report_item_id", "CREATE INDEX idx_report_item_id ON report(item_id)"},
+            {"idx_report_user_id", "CREATE INDEX idx_report_user_id ON report(user_id)"},
+            {"idx_report_status", "CREATE INDEX idx_report_status ON report(status)"},
+            {"idx_report_create_time", "CREATE INDEX idx_report_create_time ON report(create_time)"}
+    };
+
     @Override
     public void run(ApplicationArguments args) {
         try {
             migrateNotificationTable();
             migrateItemLikeTable();
             migrateItemLikeCountColumn();
+            migrateReportTable();
         } catch (Exception e) {
             log.error("数据库迁移执行失败，如相关功能异常请检查数据库权限：{}", e.getMessage());
         }
@@ -246,5 +274,26 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             }
         }
         return false;
+    }
+
+    private void migrateReportTable() {
+        try (Connection conn = dataSource.getConnection()) {
+            String databaseName = getCurrentDatabase(conn);
+            if (databaseName == null) {
+                log.warn("无法获取当前数据库名，跳过 report 表迁移");
+                return;
+            }
+
+            if (!tableExists(conn, databaseName, "report")) {
+                log.info("检测到 report 表不存在，开始创建...");
+                execute(conn, REPORT_TABLE_DDL);
+                log.info("report 表创建完成");
+            } else {
+                log.debug("report 表已存在，跳过建表");
+                ensureIndexes(conn, databaseName, "report", REPORT_INDEXES);
+            }
+        } catch (Exception e) {
+            log.error("report 表迁移失败: {}", e.getMessage());
+        }
     }
 }
