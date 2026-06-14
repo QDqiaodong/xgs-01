@@ -29,4 +29,8 @@ public class CacheKeyConstants {
     public static final String CACHE_WARMUP_LOCK_KEY = "swap:cache:warmup:lock";
     public static final long CACHE_WARMUP_LOCK_TTL = 60;
     public static final java.util.concurrent.TimeUnit CACHE_WARMUP_LOCK_TTL_UNIT = java.util.concurrent.TimeUnit.SECONDS;
+
+    public static final String STATISTICS_DASHBOARD_KEY = "swap:statistics:dashboard:";
+    public static final long STATISTICS_DASHBOARD_TTL = 5;
+    public static final java.util.concurrent.TimeUnit STATISTICS_DASHBOARD_TTL_UNIT = java.util.concurrent.TimeUnit.MINUTES;
 }

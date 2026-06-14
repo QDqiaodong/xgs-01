@@ -422,5 +422,6 @@ public class ItemService {
         }
         redisCacheService.delete(CacheKeyConstants.TOP_ITEMS_KEY);
         redisCacheService.deleteByPattern(CacheKeyConstants.LIKE_RANKING_KEY + "*");
+        redisCacheService.deleteByPattern(CacheKeyConstants.STATISTICS_DASHBOARD_KEY + "*");
     }
 }

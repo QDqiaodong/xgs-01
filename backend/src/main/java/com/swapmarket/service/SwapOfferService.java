@@ -240,5 +240,6 @@ public class SwapOfferService {
         }
         redisCacheService.delete(CacheKeyConstants.USER_PENDING_OFFERS_KEY + userId);
         redisCacheService.delete(CacheKeyConstants.USER_OFFER_COUNT_KEY + userId);
+        redisCacheService.deleteByPattern(CacheKeyConstants.STATISTICS_DASHBOARD_KEY + "*");
     }
 }
