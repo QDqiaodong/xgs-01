@@ -38,6 +38,7 @@ public class NotificationService {
     public static final String TYPE_NEW_OFFER = "new_offer";
     public static final String TYPE_OFFER_ACCEPTED = "offer_accepted";
     public static final String TYPE_OFFER_REJECTED = "offer_rejected";
+    public static final String TYPE_NEW_REVIEW = "new_review";
 
     private long getTtlWithJitterMinutes() {
         return BASE_TTL_MINUTES;
@@ -158,6 +159,22 @@ public class NotificationService {
         evictCache(fromUserId);
         notificationMapper.insert(notification);
         scheduleDoubleDelete(fromUserId);
+    }
+
+    @Transactional
+    public void createReviewNotification(Long targetUserId, Long reviewerId, Long offerId,
+                                         String reviewerName, Integer rating) {
+        String starStr = "⭐".repeat(rating != null ? rating : 0);
+        Notification notification = new Notification();
+        notification.setUserId(targetUserId);
+        notification.setType(TYPE_NEW_REVIEW);
+        notification.setTitle("您收到一条新的评价");
+        notification.setContent(reviewerName + " 对您的交易给出了评价 " + starStr);
+        notification.setOfferId(offerId);
+        notification.setReadFlag(false);
+        evictCache(targetUserId);
+        notificationMapper.insert(notification);
+        scheduleDoubleDelete(targetUserId);
     }
 
     private void evictCache(Long userId) {

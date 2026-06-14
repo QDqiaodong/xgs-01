@@ -1,6 +1,7 @@
 package com.swapmarket.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.swapmarket.common.CacheKeyConstants;
 import com.swapmarket.common.PageResult;
@@ -9,11 +10,13 @@ import com.swapmarket.entity.Favorite;
 import com.swapmarket.entity.Item;
 import com.swapmarket.entity.ItemImage;
 import com.swapmarket.entity.ItemLike;
+import com.swapmarket.entity.User;
 import com.swapmarket.mapper.CategoryMapper;
 import com.swapmarket.mapper.FavoriteMapper;
 import com.swapmarket.mapper.ItemImageMapper;
 import com.swapmarket.mapper.ItemLikeMapper;
 import com.swapmarket.mapper.ItemMapper;
+import com.swapmarket.mapper.UserMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -28,6 +31,7 @@ import java.time.temporal.TemporalAdjusters;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -39,6 +43,7 @@ public class ItemService {
     private final CategoryMapper categoryMapper;
     private final FavoriteMapper favoriteMapper;
     private final ItemLikeMapper itemLikeMapper;
+    private final UserMapper userMapper;
     private final FileStorageService fileStorageService;
     private final RedisCacheService redisCacheService;
     private final ViewCountService viewCountService;
@@ -65,20 +70,8 @@ public class ItemService {
     public PageResult<Item> listItems(int page, int size, Long categoryId, String condition,
                                       List<String> conditions, String timeRange, String keyword,
                                       Boolean hasImages, String exchangeKeyword) {
-        LambdaQueryWrapper<Item> wrapper = new LambdaQueryWrapper<Item>()
-                .eq(Item::getStatus, "published")
-                .eq(categoryId != null, Item::getCategoryId, categoryId)
-                .eq(condition != null && conditions == null, Item::getCondition, condition)
-                .in(conditions != null && !conditions.isEmpty(), Item::getCondition, conditions)
-                .and(keyword != null, w -> w
-                        .like(Item::getTitle, keyword)
-                        .or()
-                        .like(Item::getDescription, keyword))
-                .like(exchangeKeyword != null, Item::getExpectedSwap, exchangeKeyword)
-                .orderByDesc(Item::getCreateTime);
-
+        LocalDateTime startTime = null;
         if (timeRange != null) {
-            LocalDateTime startTime = null;
             switch (timeRange) {
                 case "today":
                     startTime = LocalDateTime.of(LocalDate.now(), LocalTime.MIN);
@@ -92,16 +85,13 @@ public class ItemService {
                     startTime = LocalDateTime.of(firstDayOfMonth, LocalTime.MIN);
                     break;
             }
-            if (startTime != null) {
-                wrapper.ge(Item::getCreateTime, startTime);
-            }
         }
 
-        if (Boolean.TRUE.equals(hasImages)) {
-            wrapper.exists("SELECT 1 FROM item_image ii WHERE ii.item_id = item.id");
-        }
+        Page<Item> pageParam = Page.of(page, size);
+        IPage<Item> itemPage = itemMapper.selectPageWithCreditScore(
+                pageParam, categoryId, condition, conditions, keyword, exchangeKeyword, startTime, hasImages
+        );
 
-        Page<Item> itemPage = itemMapper.selectPage(Page.of(page, size), wrapper);
         enrichItems(itemPage.getRecords());
 
         return PageResult.of(itemPage.getRecords(), itemPage.getTotal(), page, size);
@@ -204,6 +194,30 @@ public class ItemService {
                         Collectors.mapping(ItemImage::getImageUrl, Collectors.toList())
                 ));
 
+        Set<Long> userIds = items.stream()
+                .map(Item::getUserId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Long, User> userMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            List<User> users = userMapper.selectBatchIds(userIds);
+            for (User user : users) {
+                user.setPassword(null);
+                userMap.put(user.getId(), user);
+            }
+        }
+
+        Map<Long, Integer> userItemCountMap = new HashMap<>();
+        if (!userIds.isEmpty()) {
+            for (Long uid : userIds) {
+                Long count = itemMapper.selectCount(new LambdaQueryWrapper<Item>()
+                        .eq(Item::getUserId, uid)
+                        .eq(Item::getStatus, "published"));
+                userItemCountMap.put(uid, count != null ? count.intValue() : 0);
+            }
+        }
+
         Set<Long> favoriteItemIds = null;
         Set<Long> likedItemIds = null;
         if (userId != null) {
@@ -228,6 +242,9 @@ public class ItemService {
             if (item.getLikeCount() == null) {
                 item.setLikeCount(0);
             }
+            User publisher = userMap.get(item.getUserId());
+            item.setPublisher(publisher);
+            item.setItemCount(userItemCountMap.getOrDefault(item.getUserId(), 0));
             if (userId != null) {
                 item.setFavorited(favoriteItemIds.contains(item.getId()));
                 item.setLiked(likedItemIds.contains(item.getId()));

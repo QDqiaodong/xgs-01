@@ -21,6 +21,10 @@ public class User {
     private String phone;
     
     private String email;
+
+    private Double creditScore;
+
+    private Integer reviewCount;
     
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

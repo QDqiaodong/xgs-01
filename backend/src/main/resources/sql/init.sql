@@ -10,6 +10,8 @@ CREATE TABLE IF NOT EXISTS user (
     avatar VARCHAR(255),
     phone VARCHAR(20),
     email VARCHAR(100),
+    credit_score DECIMAL(3,2) DEFAULT 5.00,
+    review_count INT DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT DEFAULT 0
@@ -149,5 +151,20 @@ INSERT IGNORE INTO category (id, name, icon, sort_order) VALUES
 (5, '运动户外', 'Bicycle', 5),
 (6, '服饰鞋包', 'Trophy', 6);
 
-INSERT IGNORE INTO user (id, username, password, nickname) VALUES
-(1, 'demo', '123456', '演示用户');
+CREATE TABLE IF NOT EXISTS user_review (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    offer_id BIGINT NOT NULL,
+    reviewer_id BIGINT NOT NULL,
+    target_user_id BIGINT NOT NULL,
+    rating TINYINT NOT NULL,
+    content VARCHAR(500),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    deleted TINYINT DEFAULT 0,
+    UNIQUE KEY uk_offer_reviewer(offer_id, reviewer_id),
+    INDEX idx_target_user(target_user_id),
+    INDEX idx_reviewer(reviewer_id),
+    INDEX idx_create_time(create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+INSERT IGNORE INTO user (id, username, password, nickname, credit_score, review_count) VALUES
+(1, 'demo', '123456', '演示用户', 5.00, 0);

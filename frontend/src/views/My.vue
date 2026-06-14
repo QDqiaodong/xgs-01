@@ -1,5 +1,17 @@
 <template>
   <div class="page-container">
+    <div class="user-profile-card">
+      <el-avatar :size="64">{{ userStore.userInfo?.nickname?.[0] || 'U' }}</el-avatar>
+      <div class="profile-info">
+        <div class="profile-name">{{ userStore.userInfo?.nickname || '用户' }}</div>
+        <div class="profile-credit">
+          <el-rate :model-value="creditInfo.creditScore || 5" disabled size="small" />
+          <span class="credit-score">{{ (creditInfo.creditScore || 5).toFixed(1) }}分</span>
+          <span class="review-count">{{ creditInfo.reviewCount || 0 }}条评价</span>
+        </div>
+      </div>
+    </div>
+
     <h1 class="page-title">我的库房</h1>
 
     <el-tabs v-model="activeTab" class="my-tabs">
@@ -178,6 +190,42 @@
         </div>
         <el-empty v-if="historyList.length === 0" description="暂无浏览记录" />
       </el-tab-pane>
+
+      <el-tab-pane label="收到的评价" name="reviews">
+        <div class="reviews-list">
+          <div 
+            v-for="review in receivedReviews" 
+            :key="review.id" 
+            class="review-item"
+          >
+            <div class="review-header">
+              <el-avatar :size="40">{{ review.reviewer?.nickname?.[0] || 'U' }}</el-avatar>
+              <div class="reviewer-info">
+                <div class="reviewer-name">{{ review.reviewer?.nickname || '匿名用户' }}</div>
+                <div class="review-meta">
+                  <el-rate :model-value="review.rating" disabled size="small" />
+                  <span class="review-time">{{ formatReviewTime(review.createTime) }}</span>
+                </div>
+              </div>
+            </div>
+            <div class="review-content" v-if="review.content">
+              {{ review.content }}
+            </div>
+            <div class="review-items" v-if="review.fromItem && review.toItem">
+              <div class="review-item-info">
+                <img :src="review.fromItem.images?.[0] || PLACEHOLDER_IMAGE" class="review-item-img" />
+                <span class="review-item-title">{{ review.fromItem.title }}</span>
+              </div>
+              <el-icon color="#909399"><Switch /></el-icon>
+              <div class="review-item-info">
+                <img :src="review.toItem.images?.[0] || PLACEHOLDER_IMAGE" class="review-item-img" />
+                <span class="review-item-title">{{ review.toItem.title }}</span>
+              </div>
+            </div>
+          </div>
+          <el-empty v-if="receivedReviews.length === 0 && !reviewsLoading" description="暂无收到的评价" />
+        </div>
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="showEditDialog" title="编辑物品" width="600px">
@@ -228,6 +276,10 @@ const showEditDialog = ref(false)
 const editForm = ref({})
 const favoriteLoading = computed(() => favoriteStore.loading)
 const publishingDraftId = ref(null)
+
+const creditInfo = ref({ creditScore: 5.0, reviewCount: 0 })
+const receivedReviews = ref([])
+const reviewsLoading = ref(false)
 
 const favoritedMap = computed(() => {
   favoriteStore.updateVersion
@@ -388,6 +440,9 @@ watch(activeTab, (newVal) => {
   if (newVal === 'favorites') {
     loadFavorites()
   }
+  if (newVal === 'reviews') {
+    loadReceivedReviews()
+  }
 })
 
 const loadFavorites = async () => {
@@ -477,6 +532,44 @@ const rePublish = async (item) => {
   }
 }
 
+const loadCreditInfo = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    return
+  }
+  try {
+    const res = await api.get(`/review/credit/${userStore.userInfo.id}`)
+    if (res.data.success) {
+      creditInfo.value = res.data.data
+    }
+  } catch (e) {
+    console.log('加载信用信息失败')
+  }
+}
+
+const loadReceivedReviews = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    receivedReviews.value = []
+    return
+  }
+  reviewsLoading.value = true
+  try {
+    const res = await api.get(`/review/user/${userStore.userInfo.id}`)
+    if (res.data.success) {
+      receivedReviews.value = res.data.data || []
+    }
+  } catch (e) {
+    receivedReviews.value = []
+    console.log('加载评价列表失败')
+  } finally {
+    reviewsLoading.value = false
+  }
+}
+
+const formatReviewTime = (time) => {
+  if (!time) return ''
+  return time.replace('T', ' ').substring(0, 16)
+}
+
 onMounted(async () => {
   if (!userStore.isLoggedIn || !userStore.userInfo.id) {
     assignMyItems([])
@@ -484,6 +577,7 @@ onMounted(async () => {
   }
   try {
     await loadMyItems()
+    loadCreditInfo()
   } catch (e) {
     assignMyItems([])
     ElMessage.error('加载我的物品失败')
@@ -492,10 +586,49 @@ onMounted(async () => {
 </script>
 
 <style lang="scss" scoped>
-.my-tabs {
-  :deep(.el-tabs__content) {
-    padding-top: 20px;
+.user-profile-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 24px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  color: white;
+
+  .profile-info {
+    .profile-name {
+      font-size: 20px;
+      font-weight: 600;
+      margin-bottom: 8px;
+    }
+
+    .profile-credit {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      :deep(.el-rate) {
+        --el-rate-fill-color: #ffd700;
+        --el-rate-void-color: rgba(255, 255, 255, 0.3);
+      }
+
+      .credit-score {
+        font-size: 15px;
+        font-weight: 500;
+        color: #ffd700;
+      }
+
+      .review-count {
+        font-size: 13px;
+        opacity: 0.9;
+      }
+    }
   }
+}
+
+.page-title {
+  margin-bottom: 16px;
 }
 
 .item-card {
@@ -611,6 +744,92 @@ onMounted(async () => {
   .history-count {
     font-size: 14px;
     color: #606266;
+  }
+}
+
+.reviews-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+
+  .review-item {
+    padding: 20px;
+    background: white;
+    border-radius: 10px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+
+    .review-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 12px;
+
+      .reviewer-info {
+        flex: 1;
+        min-width: 0;
+
+        .reviewer-name {
+          font-size: 15px;
+          font-weight: 500;
+          color: #303133;
+          margin-bottom: 4px;
+        }
+
+        .review-meta {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+
+          .review-time {
+            font-size: 12px;
+            color: #909399;
+          }
+        }
+      }
+    }
+
+    .review-content {
+      font-size: 14px;
+      color: #606266;
+      line-height: 1.6;
+      margin-bottom: 12px;
+      padding: 12px;
+      background: #f5f7fa;
+      border-radius: 6px;
+    }
+
+    .review-items {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: #fafbfc;
+      border-radius: 6px;
+
+      .review-item-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+        min-width: 0;
+
+        .review-item-img {
+          width: 48px;
+          height: 48px;
+          border-radius: 6px;
+          object-fit: cover;
+          flex-shrink: 0;
+        }
+
+        .review-item-title {
+          font-size: 13px;
+          color: #606266;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+      }
+    }
   }
 }
 </style>

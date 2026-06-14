@@ -58,6 +58,8 @@ public class UserService {
         vo.setUsername(user.getUsername());
         vo.setNickname(user.getNickname());
         vo.setAvatar(user.getAvatar());
+        vo.setCreditScore(user.getCreditScore());
+        vo.setReviewCount(user.getReviewCount());
         vo.setCreateTime(user.getCreateTime());
         return vo;
     }

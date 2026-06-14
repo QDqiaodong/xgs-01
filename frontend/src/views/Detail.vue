@@ -86,6 +86,11 @@
                   <div class="publisher-info">
                     <div class="publisher-name">{{ item.publisher?.nickname || '用户' }}</div>
                     <div class="publisher-stats">已发布 {{ item.publisher?.itemCount || 0 }} 件物品</div>
+                    <div class="publisher-credit" v-if="item.publisher?.creditScore !== undefined">
+                      <el-rate :model-value="Number(item.publisher.creditScore)" disabled size="small" />
+                      <span class="credit-score">{{ Number(item.publisher.creditScore).toFixed(1) }}分</span>
+                      <span class="review-count">({{ item.publisher.reviewCount || 0 }}条评价)</span>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -757,6 +762,24 @@ onMounted(() => {
         font-size: 13px;
         color: #909399;
         margin-top: 4px;
+      }
+
+      .publisher-credit {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        margin-top: 6px;
+
+        .credit-score {
+          font-size: 13px;
+          font-weight: 500;
+          color: #e6a23c;
+        }
+
+        .review-count {
+          font-size: 12px;
+          color: #909399;
+        }
       }
     }
   }

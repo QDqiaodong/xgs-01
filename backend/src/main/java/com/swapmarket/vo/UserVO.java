@@ -9,5 +9,7 @@ public class UserVO {
     private String username;
     private String nickname;
     private String avatar;
+    private Double creditScore;
+    private Integer reviewCount;
     private LocalDateTime createTime;
 }

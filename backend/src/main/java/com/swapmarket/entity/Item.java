@@ -52,4 +52,10 @@ public class Item {
 
     @TableField(exist = false)
     private Boolean liked;
+
+    @TableField(exist = false)
+    private User publisher;
+
+    @TableField(exist = false)
+    private Integer itemCount;
 }

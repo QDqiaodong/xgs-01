@@ -33,4 +33,12 @@ public class CacheKeyConstants {
     public static final String STATISTICS_DASHBOARD_KEY = "swap:statistics:dashboard:";
     public static final long STATISTICS_DASHBOARD_TTL = 5;
     public static final java.util.concurrent.TimeUnit STATISTICS_DASHBOARD_TTL_UNIT = java.util.concurrent.TimeUnit.MINUTES;
+
+    public static final String USER_REVIEWS_KEY = "swap:user:reviews:";
+    public static final long USER_REVIEWS_TTL = 30;
+    public static final java.util.concurrent.TimeUnit USER_REVIEWS_TTL_UNIT = java.util.concurrent.TimeUnit.MINUTES;
+
+    public static final String USER_CREDIT_KEY = "swap:user:credit:";
+    public static final long USER_CREDIT_TTL = 1;
+    public static final java.util.concurrent.TimeUnit USER_CREDIT_TTL_UNIT = java.util.concurrent.TimeUnit.HOURS;
 }

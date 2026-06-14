@@ -74,8 +74,88 @@
           <el-button type="success" size="large" @click="handleAccept">同意邀约</el-button>
           <el-button type="danger" size="large" @click="handleReject">驳回邀约</el-button>
         </div>
+
+        <div class="review-section" v-if="offer.status === 'accepted'">
+          <el-divider content-position="left">
+            <span class="divider-title">交易评价</span>
+          </el-divider>
+
+          <div class="review-status-row">
+            <div class="review-status-item">
+              <span class="status-text">我的评价：</span>
+              <el-tag v-if="reviewStatus.currentUserReviewed" type="success" size="small">已评价</el-tag>
+              <el-tag v-else type="info" size="small">未评价</el-tag>
+            </div>
+            <div class="review-status-item">
+              <span class="status-text">对方评价：</span>
+              <el-tag v-if="reviewStatus.targetUserReviewed" type="success" size="small">已评价</el-tag>
+              <el-tag v-else type="info" size="small">未评价</el-tag>
+            </div>
+            <el-button
+              v-if="!reviewStatus.currentUserReviewed"
+              type="primary"
+              size="small"
+              @click="showReviewDialog = true"
+            >
+              去评价
+            </el-button>
+          </div>
+
+          <div class="review-content" v-if="reviewStatus.myReview">
+            <div class="review-label">我的评价：</div>
+            <div class="review-card">
+              <div class="review-rating">
+                <el-rate :model-value="reviewStatus.myReview.rating" disabled />
+                <span class="rating-text">{{ reviewStatus.myReview.rating }}星</span>
+              </div>
+              <div class="review-text" v-if="reviewStatus.myReview.content">
+                {{ reviewStatus.myReview.content }}
+              </div>
+              <div class="review-time">{{ formatTime(reviewStatus.myReview.createTime) }}</div>
+            </div>
+          </div>
+
+          <div class="review-content" v-if="reviewStatus.targetReview">
+            <div class="review-label">对方评价：</div>
+            <div class="review-card">
+              <div class="review-rating">
+                <el-rate :model-value="reviewStatus.targetReview.rating" disabled />
+                <span class="rating-text">{{ reviewStatus.targetReview.rating }}星</span>
+              </div>
+              <div class="review-text" v-if="reviewStatus.targetReview.content">
+                {{ reviewStatus.targetReview.content }}
+              </div>
+              <div class="review-time">{{ formatTime(reviewStatus.targetReview.createTime) }}</div>
+            </div>
+          </div>
+        </div>
       </el-card>
     </div>
+
+    <el-dialog v-model="showReviewDialog" title="评价对方" width="500px">
+      <el-form :model="reviewForm" label-width="80px">
+        <el-form-item label="评分">
+          <el-rate v-model="reviewForm.rating" :max="5" />
+          <span class="form-hint">请选择1-5星评价</span>
+        </el-form-item>
+        <el-form-item label="评价内容">
+          <el-input
+            v-model="reviewForm.content"
+            type="textarea"
+            :rows="4"
+            placeholder="请输入您的评价内容（选填）"
+            maxlength="500"
+            show-word-limit
+          />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showReviewDialog = false">取消</el-button>
+        <el-button type="primary" :loading="submittingReview" @click="submitReview">
+          提交评价
+        </el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -98,6 +178,21 @@ const userStore = useUserStore()
 
 const offer = ref(null)
 const loading = ref(false)
+const showReviewDialog = ref(false)
+const submittingReview = ref(false)
+const reviewStatus = ref({
+  canReview: false,
+  currentUserReviewed: false,
+  targetUserReviewed: false,
+  fromUserReviewed: false,
+  toUserReviewed: false,
+  myReview: null,
+  targetReview: null
+})
+const reviewForm = ref({
+  rating: 5,
+  content: ''
+})
 
 const formatTime = (t) => {
   if (!t) return ''
@@ -200,11 +295,53 @@ const loadDetail = async () => {
         ...res.data.data,
         createTime: formatTime(res.data.data.createTime)
       }
+      loadReviewStatus()
     }
   } catch (e) {
     ElMessage.error('加载邀约详情失败')
   } finally {
     loading.value = false
+  }
+}
+
+const loadReviewStatus = async () => {
+  try {
+    const res = await api.get(`/review/offer/${route.params.id}/status`, {
+      params: { userId: userStore.userInfo.id }
+    })
+    if (res.data.success) {
+      reviewStatus.value = res.data.data
+    }
+  } catch (e) {
+    console.log('加载评价状态失败')
+  }
+}
+
+const submitReview = async () => {
+  if (!reviewForm.value.rating || reviewForm.value.rating < 1) {
+    ElMessage.warning('请选择评分')
+    return
+  }
+  submittingReview.value = true
+  try {
+    const res = await api.post('/review/create', {
+      userId: userStore.userInfo.id,
+      offerId: route.params.id,
+      rating: reviewForm.value.rating,
+      content: reviewForm.value.content
+    })
+    if (res.data.success) {
+      ElMessage.success('评价提交成功')
+      showReviewDialog.value = false
+      reviewForm.value = { rating: 5, content: '' }
+      loadReviewStatus()
+    } else {
+      ElMessage.error(res.data.message || '评价失败')
+    }
+  } catch (e) {
+    ElMessage.error('评价失败，请稍后重试')
+  } finally {
+    submittingReview.value = false
   }
 }
 
@@ -370,5 +507,81 @@ onMounted(() => {
   justify-content: center;
   gap: 20px;
   padding-top: 24px;
+}
+
+.review-section {
+  margin-top: 10px;
+
+  .divider-title {
+    font-size: 16px;
+    font-weight: 500;
+    color: #303133;
+  }
+
+  .review-status-row {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 16px 0;
+
+    .review-status-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+
+      .status-text {
+        font-size: 14px;
+        color: #606266;
+      }
+    }
+  }
+
+  .review-content {
+    margin-top: 16px;
+
+    .review-label {
+      font-size: 14px;
+      font-weight: 500;
+      color: #303133;
+      margin-bottom: 10px;
+    }
+
+    .review-card {
+      padding: 16px;
+      background: #f5f7fa;
+      border-radius: 8px;
+
+      .review-rating {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+
+        .rating-text {
+          font-size: 14px;
+          font-weight: 500;
+          color: #e6a23c;
+        }
+      }
+
+      .review-text {
+        font-size: 14px;
+        color: #606266;
+        line-height: 1.6;
+        margin-bottom: 8px;
+      }
+
+      .review-time {
+        font-size: 12px;
+        color: #909399;
+      }
+    }
+  }
+}
+
+.form-hint {
+  margin-left: 8px;
+  font-size: 12px;
+  color: #909399;
 }
 </style>
