@@ -128,6 +128,19 @@ CREATE TABLE IF NOT EXISTS report (
     INDEX idx_report_create_time(create_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS swap_offer_status_log (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    offer_id BIGINT NOT NULL,
+    from_status VARCHAR(20),
+    to_status VARCHAR(20) NOT NULL,
+    operator_id BIGINT NOT NULL,
+    operator_name VARCHAR(50),
+    remark VARCHAR(500),
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_offer_id(offer_id),
+    INDEX idx_create_time(create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 INSERT IGNORE INTO category (id, name, icon, sort_order) VALUES
 (1, '数码家电', 'Monitor', 1),
 (2, '图书文具', 'Reading', 2),

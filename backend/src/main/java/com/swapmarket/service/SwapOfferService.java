@@ -2,25 +2,24 @@ package com.swapmarket.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.swapmarket.common.CacheKeyConstants;
-import com.swapmarket.entity.Item;
-import com.swapmarket.entity.ItemImage;
-import com.swapmarket.entity.SwapOffer;
-import com.swapmarket.entity.User;
-import com.swapmarket.mapper.ItemImageMapper;
-import com.swapmarket.mapper.ItemMapper;
-import com.swapmarket.mapper.SwapOfferMapper;
-import com.swapmarket.mapper.UserMapper;
+import com.swapmarket.entity.*;
+import com.swapmarket.enums.SwapOfferStatus;
+import com.swapmarket.exception.BusinessException;
+import com.swapmarket.mapper.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class SwapOfferService {
     private final SwapOfferMapper swapOfferMapper;
+    private final SwapOfferStatusLogMapper swapOfferStatusLogMapper;
     private final ItemMapper itemMapper;
     private final ItemImageMapper itemImageMapper;
     private final UserMapper userMapper;
@@ -64,8 +63,13 @@ public class SwapOfferService {
         offer.setFromItemId(fromItemId);
         offer.setToItemId(toItemId);
         offer.setMessage(message);
-        offer.setStatus("pending");
+        offer.setStatus(SwapOfferStatus.PENDING.getCode());
         swapOfferMapper.insert(offer);
+
+        User fromUser = userMapper.selectById(fromUserId);
+        recordStatusLog(offer.getId(), null, SwapOfferStatus.PENDING.getCode(),
+                fromUserId, fromUser != null ? fromUser.getNickname() : null, "发起互换邀约");
+        log.info("用户[{}]发起互换邀约，邀约ID: {}", fromUserId, offer.getId());
 
         notificationService.createNewOfferNotification(
                 toItem.getUserId(),
@@ -112,8 +116,18 @@ public class SwapOfferService {
         if (offer == null || !offer.getToUserId().equals(userId)) {
             throw new RuntimeException("邀约不存在或无权操作");
         }
-        offer.setStatus("accepted");
+
+        validateStatusTransition(offer.getStatus(), SwapOfferStatus.ACCEPTED.getCode());
+
+        String oldStatus = offer.getStatus();
+        offer.setStatus(SwapOfferStatus.ACCEPTED.getCode());
         swapOfferMapper.updateById(offer);
+
+        User operator = userMapper.selectById(userId);
+        recordStatusLog(offer.getId(), oldStatus, SwapOfferStatus.ACCEPTED.getCode(),
+                userId, operator != null ? operator.getNickname() : null, "接受互换邀约");
+        log.info("用户[{}]接受互换邀约，邀约ID: {}，状态: {} -> {}",
+                userId, offerId, oldStatus, SwapOfferStatus.ACCEPTED.getCode());
 
         Item fromItem = itemMapper.selectById(offer.getFromItemId());
         Item toItem = itemMapper.selectById(offer.getToItemId());
@@ -144,8 +158,18 @@ public class SwapOfferService {
         if (offer == null || !offer.getToUserId().equals(userId)) {
             throw new RuntimeException("邀约不存在或无权操作");
         }
-        offer.setStatus("rejected");
+
+        validateStatusTransition(offer.getStatus(), SwapOfferStatus.REJECTED.getCode());
+
+        String oldStatus = offer.getStatus();
+        offer.setStatus(SwapOfferStatus.REJECTED.getCode());
         swapOfferMapper.updateById(offer);
+
+        User operator = userMapper.selectById(userId);
+        recordStatusLog(offer.getId(), oldStatus, SwapOfferStatus.REJECTED.getCode(),
+                userId, operator != null ? operator.getNickname() : null, "驳回互换邀约");
+        log.info("用户[{}]驳回互换邀约，邀约ID: {}，状态: {} -> {}",
+                userId, offerId, oldStatus, SwapOfferStatus.REJECTED.getCode());
 
         Item fromItem = itemMapper.selectById(offer.getFromItemId());
         Item toItem = itemMapper.selectById(offer.getToItemId());
@@ -226,7 +250,7 @@ public class SwapOfferService {
 
         long count = swapOfferMapper.selectCount(new LambdaQueryWrapper<SwapOffer>()
                 .eq(SwapOffer::getToUserId, userId)
-                .eq(SwapOffer::getStatus, "pending"));
+                .eq(SwapOffer::getStatus, SwapOfferStatus.PENDING.getCode()));
 
         int result = (int) count;
         redisCacheService.set(countKey, result,
@@ -241,5 +265,32 @@ public class SwapOfferService {
         redisCacheService.delete(CacheKeyConstants.USER_PENDING_OFFERS_KEY + userId);
         redisCacheService.delete(CacheKeyConstants.USER_OFFER_COUNT_KEY + userId);
         redisCacheService.deleteByPattern(CacheKeyConstants.STATISTICS_DASHBOARD_KEY + "*");
+    }
+
+    private void validateStatusTransition(String currentStatus, String targetStatus) {
+        SwapOfferStatus current = SwapOfferStatus.fromCode(currentStatus);
+        SwapOfferStatus target = SwapOfferStatus.fromCode(targetStatus);
+
+        if (current == null) {
+            throw BusinessException.invalidStatusTransition(currentStatus, targetStatus);
+        }
+        if (target == null) {
+            throw new BusinessException("无效的目标状态: " + targetStatus);
+        }
+        if (!current.canTransitionTo(target)) {
+            throw BusinessException.invalidStatusTransition(currentStatus, targetStatus);
+        }
+    }
+
+    private void recordStatusLog(Long offerId, String fromStatus, String toStatus,
+                                  Long operatorId, String operatorName, String remark) {
+        try {
+            SwapOfferStatusLog statusLog = SwapOfferStatusLog.of(
+                    offerId, fromStatus, toStatus, operatorId, operatorName, remark);
+            swapOfferStatusLogMapper.insert(statusLog);
+        } catch (Exception e) {
+            log.error("记录邀约状态变更日志失败，offerId: {}, fromStatus: {}, toStatus: {}",
+                    offerId, fromStatus, toStatus, e);
+        }
     }
 }

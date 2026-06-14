@@ -92,6 +92,25 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             {"idx_report_create_time", "CREATE INDEX idx_report_create_time ON report(create_time)"}
     };
 
+    private static final String SWAP_OFFER_STATUS_LOG_TABLE_DDL =
+            "CREATE TABLE IF NOT EXISTS swap_offer_status_log (" +
+            "  id BIGINT PRIMARY KEY AUTO_INCREMENT," +
+            "  offer_id BIGINT NOT NULL," +
+            "  from_status VARCHAR(20)," +
+            "  to_status VARCHAR(20) NOT NULL," +
+            "  operator_id BIGINT NOT NULL," +
+            "  operator_name VARCHAR(50)," +
+            "  remark VARCHAR(500)," +
+            "  create_time DATETIME DEFAULT CURRENT_TIMESTAMP," +
+            "  INDEX idx_offer_id(offer_id)," +
+            "  INDEX idx_create_time(create_time)" +
+            ") ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    private static final String[][] SWAP_OFFER_STATUS_LOG_INDEXES = {
+            {"idx_offer_id", "CREATE INDEX idx_offer_id ON swap_offer_status_log(offer_id)"},
+            {"idx_create_time", "CREATE INDEX idx_create_time ON swap_offer_status_log(create_time)"}
+    };
+
     @Override
     public void run(ApplicationArguments args) {
         try {
@@ -99,6 +118,7 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             migrateItemLikeTable();
             migrateItemLikeCountColumn();
             migrateReportTable();
+            migrateSwapOfferStatusLogTable();
         } catch (Exception e) {
             log.error("数据库迁移执行失败，如相关功能异常请检查数据库权限：{}", e.getMessage());
         }
@@ -294,6 +314,27 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             }
         } catch (Exception e) {
             log.error("report 表迁移失败: {}", e.getMessage());
+        }
+    }
+
+    private void migrateSwapOfferStatusLogTable() {
+        try (Connection conn = dataSource.getConnection()) {
+            String databaseName = getCurrentDatabase(conn);
+            if (databaseName == null) {
+                log.warn("无法获取当前数据库名，跳过 swap_offer_status_log 表迁移");
+                return;
+            }
+
+            if (!tableExists(conn, databaseName, "swap_offer_status_log")) {
+                log.info("检测到 swap_offer_status_log 表不存在，开始创建...");
+                execute(conn, SWAP_OFFER_STATUS_LOG_TABLE_DDL);
+                log.info("swap_offer_status_log 表创建完成");
+            } else {
+                log.debug("swap_offer_status_log 表已存在，跳过建表");
+                ensureIndexes(conn, databaseName, "swap_offer_status_log", SWAP_OFFER_STATUS_LOG_INDEXES);
+            }
+        } catch (Exception e) {
+            log.error("swap_offer_status_log 表迁移失败: {}", e.getMessage());
         }
     }
 }
