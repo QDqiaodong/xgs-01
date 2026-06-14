@@ -107,7 +107,7 @@ public class UserReviewService {
 
     public Map<String, Object> getUserCreditInfo(Long userId) {
         String cacheKey = CacheKeyConstants.USER_CREDIT_KEY + userId;
-        Map<String, Object> cached = redisCacheService.getMap(cacheKey);
+        Map<String, Object> cached = redisCacheService.getMap(cacheKey, String.class, Object.class);
         if (cached != null) {
             return cached;
         }
