@@ -101,7 +101,7 @@
 
         <div class="offer-actions">
           <el-button type="primary" size="large" @click="goToComparison">
-            <el-icon><Scale /></el-icon>
+            <el-icon><Goods /></el-icon>
             成色对比工作台
           </el-button>
           <template v-if="isReceived && offer.status === 'pending'">
@@ -212,7 +212,7 @@ import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   Plus, Check, Close, Clock, Van, Finished, Star,
-  Switch, Scale
+  Switch, Goods
 } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { useUserStore } from '@/stores/user'
