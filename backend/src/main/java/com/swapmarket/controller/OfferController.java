@@ -3,6 +3,7 @@ package com.swapmarket.controller;
 import com.swapmarket.common.Result;
 import com.swapmarket.entity.SwapOffer;
 import com.swapmarket.service.SwapOfferService;
+import com.swapmarket.vo.OfferTimelineNodeVO;
 import com.swapmarket.vo.SwapComparisonVO;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
@@ -104,6 +105,24 @@ public class OfferController {
         summary.put("checklist", checklistSummary);
 
         return Result.success(summary);
+    }
+
+    @PostMapping("/handover/{id}")
+    public Result<Void> startHandover(@RequestParam(defaultValue = "1") Long userId, @PathVariable Long id) {
+        swapOfferService.startHandover(userId, id);
+        return Result.success();
+    }
+
+    @PostMapping("/complete/{id}")
+    public Result<Void> completeOffer(@RequestParam(defaultValue = "1") Long userId, @PathVariable Long id) {
+        swapOfferService.completeOffer(userId, id);
+        return Result.success();
+    }
+
+    @GetMapping("/{id}/timeline")
+    public Result<List<OfferTimelineNodeVO>> getOfferTimeline(@RequestParam(defaultValue = "1") Long userId,
+                                                              @PathVariable Long id) {
+        return Result.success(swapOfferService.getOfferTimeline(userId, id));
     }
 
     @Data

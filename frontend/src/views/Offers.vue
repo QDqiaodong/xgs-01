@@ -45,8 +45,8 @@
                   <el-button type="danger" size="small" @click.stop="rejectOffer(offer)">驳回</el-button>
                 </div>
                 <div class="offer-status" v-else>
-                  <el-tag :type="offer.status === 'accepted' ? 'success' : 'danger'">
-                    {{ offer.status === 'accepted' ? '已同意' : '已驳回' }}
+                  <el-tag :type="getStatusType(offer.status)">
+                    {{ getStatusText(offer.status) }}
                   </el-tag>
                 </div>
               </div>
@@ -169,12 +169,26 @@ const rejectOffer = async (offer) => {
 }
 
 const getStatusType = (status) => {
-  const map = { pending: 'warning', accepted: 'success', rejected: 'danger' }
+  const map = {
+    pending: 'warning',
+    accepted: 'success',
+    rejected: 'danger',
+    expired: 'info',
+    handover: 'warning',
+    completed: 'success'
+  }
   return map[status] || 'info'
 }
 
 const getStatusText = (status) => {
-  const map = { pending: '待回复', accepted: '已同意', rejected: '已驳回' }
+  const map = {
+    pending: '待回复',
+    accepted: '已同意',
+    rejected: '已驳回',
+    expired: '已失效',
+    handover: '交接中',
+    completed: '已完成'
+  }
   return map[status] || status
 }
 

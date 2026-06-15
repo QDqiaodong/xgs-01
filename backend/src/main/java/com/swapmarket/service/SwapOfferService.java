@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -525,5 +526,245 @@ public class SwapOfferService {
             return false;
         }
         return offer.getExpireTime().isBefore(LocalDateTime.now());
+    }
+
+    @Transactional
+    public void startHandover(Long userId, Long offerId) {
+        SwapOffer offer = swapOfferMapper.selectById(offerId);
+        if (offer == null) {
+            throw new RuntimeException("邀约不存在");
+        }
+        if (!offer.getFromUserId().equals(userId) && !offer.getToUserId().equals(userId)) {
+            throw new RuntimeException("无权操作该邀约");
+        }
+
+        validateStatusTransition(offer.getStatus(), SwapOfferStatus.HANDOVER.getCode());
+
+        String oldStatus = offer.getStatus();
+        offer.setStatus(SwapOfferStatus.HANDOVER.getCode());
+        swapOfferMapper.updateById(offer);
+
+        User operator = userMapper.selectById(userId);
+        recordStatusLog(offer.getId(), oldStatus, SwapOfferStatus.HANDOVER.getCode(),
+                userId, operator != null ? operator.getNickname() : null, "确认物品交接中");
+        log.info("用户[{}]确认邀约[{}]进入交接状态，状态: {} -> {}",
+                userId, offerId, oldStatus, SwapOfferStatus.HANDOVER.getCode());
+
+        notificationService.createOfferHandoverNotification(
+                offer.getFromUserId().equals(userId) ? offer.getToUserId() : offer.getFromUserId(),
+                offer.getId(),
+                offer.getToItemId(),
+                offer.getFromItem() != null ? offer.getFromItem().getTitle() : "",
+                offer.getToItem() != null ? offer.getToItem().getTitle() : ""
+        );
+
+        clearUserOfferCaches(userId);
+        clearUserOfferCaches(offer.getFromUserId().equals(userId) ? offer.getToUserId() : offer.getFromUserId());
+    }
+
+    @Transactional
+    public void completeOffer(Long userId, Long offerId) {
+        SwapOffer offer = swapOfferMapper.selectById(offerId);
+        if (offer == null) {
+            throw new RuntimeException("邀约不存在");
+        }
+        if (!offer.getFromUserId().equals(userId) && !offer.getToUserId().equals(userId)) {
+            throw new RuntimeException("无权操作该邀约");
+        }
+
+        validateStatusTransition(offer.getStatus(), SwapOfferStatus.COMPLETED.getCode());
+
+        String oldStatus = offer.getStatus();
+        offer.setStatus(SwapOfferStatus.COMPLETED.getCode());
+        swapOfferMapper.updateById(offer);
+
+        User operator = userMapper.selectById(userId);
+        recordStatusLog(offer.getId(), oldStatus, SwapOfferStatus.COMPLETED.getCode(),
+                userId, operator != null ? operator.getNickname() : null, "确认物品交接完成");
+        log.info("用户[{}]确认邀约[{}]完成，状态: {} -> {}",
+                userId, offerId, oldStatus, SwapOfferStatus.COMPLETED.getCode());
+
+        Long otherUserId = offer.getFromUserId().equals(userId) ? offer.getToUserId() : offer.getFromUserId();
+        notificationService.createOfferCompletedNotification(
+                otherUserId,
+                offer.getId(),
+                offer.getToItemId(),
+                offer.getFromItem() != null ? offer.getFromItem().getTitle() : "",
+                offer.getToItem() != null ? offer.getToItem().getTitle() : ""
+        );
+
+        clearUserOfferCaches(userId);
+        clearUserOfferCaches(otherUserId);
+    }
+
+    public List<OfferTimelineNodeVO> getOfferTimeline(Long userId, Long offerId) {
+        SwapOffer offer = swapOfferMapper.selectById(offerId);
+        if (offer == null) {
+            throw new RuntimeException("邀约不存在");
+        }
+        if (!offer.getFromUserId().equals(userId) && !offer.getToUserId().equals(userId)) {
+            throw new RuntimeException("无权查看该邀约");
+        }
+
+        List<SwapOfferStatusLog> statusLogs = swapOfferStatusLogMapper.selectList(
+                new LambdaQueryWrapper<SwapOfferStatusLog>()
+                        .eq(SwapOfferStatusLog::getOfferId, offerId)
+                        .orderByAsc(SwapOfferStatusLog::getCreateTime)
+        );
+
+        Map<String, SwapOfferStatusLog> logMap = new HashMap<>();
+        for (SwapOfferStatusLog log : statusLogs) {
+            logMap.put(log.getToStatus(), log);
+        }
+
+        String currentStatus = offer.getStatus();
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+        List<OfferTimelineNodeVO> timeline = new ArrayList<>();
+
+        SwapOfferStatusLog pendingLog = logMap.get(SwapOfferStatus.PENDING.getCode());
+        String createTime = pendingLog != null && pendingLog.getCreateTime() != null
+                ? pendingLog.getCreateTime().format(formatter)
+                : (offer.getCreateTime() != null ? offer.getCreateTime().format(formatter) : "");
+        String pendingOperator = pendingLog != null ? pendingLog.getOperatorName() : (offer.getFromUser() != null ? offer.getFromUser().getNickname() : "");
+        String pendingRemark = pendingLog != null ? pendingLog.getRemark() : "发起互换邀约";
+        timeline.add(new OfferTimelineNodeVO(
+                SwapOfferStatus.PENDING.getCode(),
+                "发起邀约",
+                createTime,
+                pendingOperator,
+                pendingRemark,
+                true,
+                SwapOfferStatus.PENDING.getCode().equals(currentStatus),
+                SwapOfferStatus.PENDING.getCode().equals(currentStatus) ? "#409eff" : "#67c23a",
+                "Plus"
+        ));
+
+        if (SwapOfferStatus.REJECTED.getCode().equals(currentStatus)) {
+            SwapOfferStatusLog rejectedLog = logMap.get(SwapOfferStatus.REJECTED.getCode());
+            String rejectTime = rejectedLog != null && rejectedLog.getCreateTime() != null
+                    ? rejectedLog.getCreateTime().format(formatter) : "";
+            String rejectOperator = rejectedLog != null ? rejectedLog.getOperatorName() : "";
+            String rejectRemark = rejectedLog != null ? rejectedLog.getRemark() : "驳回互换邀约";
+            timeline.add(new OfferTimelineNodeVO(
+                    SwapOfferStatus.REJECTED.getCode(),
+                    "邀约已驳回",
+                    rejectTime,
+                    rejectOperator,
+                    rejectRemark,
+                    true,
+                    true,
+                    "#f56c6c",
+                    "Close"
+            ));
+            return timeline;
+        }
+
+        if (SwapOfferStatus.EXPIRED.getCode().equals(currentStatus)) {
+            SwapOfferStatusLog expiredLog = logMap.get(SwapOfferStatus.EXPIRED.getCode());
+            String expireTime = expiredLog != null && expiredLog.getCreateTime() != null
+                    ? expiredLog.getCreateTime().format(formatter) : "";
+            String expireOperator = expiredLog != null ? expiredLog.getOperatorName() : "系统";
+            String expireRemark = expiredLog != null ? expiredLog.getRemark() : "邀约已失效";
+            timeline.add(new OfferTimelineNodeVO(
+                    SwapOfferStatus.EXPIRED.getCode(),
+                    "邀约已失效",
+                    expireTime,
+                    expireOperator,
+                    expireRemark,
+                    true,
+                    true,
+                    "#909399",
+                    "Clock"
+            ));
+            return timeline;
+        }
+
+        boolean acceptedDone = !SwapOfferStatus.PENDING.getCode().equals(currentStatus);
+        SwapOfferStatusLog acceptedLog = logMap.get(SwapOfferStatus.ACCEPTED.getCode());
+        String acceptTime = acceptedLog != null && acceptedLog.getCreateTime() != null
+                ? acceptedLog.getCreateTime().format(formatter) : "";
+        String acceptOperator = acceptedLog != null ? acceptedLog.getOperatorName() : "";
+        String acceptRemark = acceptedLog != null ? acceptedLog.getRemark() : "接受互换邀约";
+        timeline.add(new OfferTimelineNodeVO(
+                SwapOfferStatus.ACCEPTED.getCode(),
+                "接受邀约",
+                acceptTime,
+                acceptOperator,
+                acceptRemark,
+                acceptedDone,
+                SwapOfferStatus.ACCEPTED.getCode().equals(currentStatus),
+                getNodeColor(currentStatus, SwapOfferStatus.ACCEPTED.getCode()),
+                "Check"
+        ));
+
+        boolean handoverDone = SwapOfferStatus.HANDOVER.getCode().equals(currentStatus)
+                || SwapOfferStatus.COMPLETED.getCode().equals(currentStatus);
+        SwapOfferStatusLog handoverLog = logMap.get(SwapOfferStatus.HANDOVER.getCode());
+        String handoverTime = handoverLog != null && handoverLog.getCreateTime() != null
+                ? handoverLog.getCreateTime().format(formatter) : "";
+        String handoverOperator = handoverLog != null ? handoverLog.getOperatorName() : "";
+        String handoverRemark = handoverLog != null ? handoverLog.getRemark() : "物品交接中，请双方确认线下/快递交接";
+        timeline.add(new OfferTimelineNodeVO(
+                SwapOfferStatus.HANDOVER.getCode(),
+                "物品交接",
+                handoverTime,
+                handoverOperator,
+                handoverRemark,
+                handoverDone,
+                SwapOfferStatus.HANDOVER.getCode().equals(currentStatus),
+                getNodeColor(currentStatus, SwapOfferStatus.HANDOVER.getCode()),
+                "Van"
+        ));
+
+        boolean completedDone = SwapOfferStatus.COMPLETED.getCode().equals(currentStatus);
+        SwapOfferStatusLog completedLog = logMap.get(SwapOfferStatus.COMPLETED.getCode());
+        String completeTime = completedLog != null && completedLog.getCreateTime() != null
+                ? completedLog.getCreateTime().format(formatter) : "";
+        String completeOperator = completedLog != null ? completedLog.getOperatorName() : "";
+        String completeRemark = completedLog != null ? completedLog.getRemark() : "物品交接完成，可进行相互评价";
+        timeline.add(new OfferTimelineNodeVO(
+                SwapOfferStatus.COMPLETED.getCode(),
+                "交换完成",
+                completeTime,
+                completeOperator,
+                completeRemark,
+                completedDone,
+                SwapOfferStatus.COMPLETED.getCode().equals(currentStatus),
+                getNodeColor(currentStatus, SwapOfferStatus.COMPLETED.getCode()),
+                "Finished"
+        ));
+
+        timeline.add(new OfferTimelineNodeVO(
+                "reviewed",
+                "完成评价",
+                "",
+                "",
+                "双方互评后完成整个互换流程",
+                false,
+                false,
+                "#c0c4cc",
+                "Star"
+        ));
+
+        return timeline;
+    }
+
+    private String getNodeColor(String currentStatus, String nodeStatus) {
+        if (nodeStatus.equals(currentStatus)) {
+            return "#409eff";
+        }
+        List<String> order = Arrays.asList(
+                SwapOfferStatus.PENDING.getCode(),
+                SwapOfferStatus.ACCEPTED.getCode(),
+                SwapOfferStatus.HANDOVER.getCode(),
+                SwapOfferStatus.COMPLETED.getCode()
+        );
+        int currentIdx = order.indexOf(currentStatus);
+        int nodeIdx = order.indexOf(nodeStatus);
+        if (nodeIdx < currentIdx) {
+            return "#67c23a";
+        }
+        return "#c0c4cc";
     }
 }

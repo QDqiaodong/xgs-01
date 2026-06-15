@@ -40,6 +40,8 @@ public class NotificationService {
     public static final String TYPE_OFFER_REJECTED = "offer_rejected";
     public static final String TYPE_OFFER_EXPIRED = "offer_expired";
     public static final String TYPE_NEW_REVIEW = "new_review";
+    public static final String TYPE_OFFER_HANDOVER = "offer_handover";
+    public static final String TYPE_OFFER_COMPLETED = "offer_completed";
 
     private long getTtlWithJitterMinutes() {
         return BASE_TTL_MINUTES;
@@ -211,5 +213,37 @@ public class NotificationService {
                 log.error("Double delete failed for user: {}", userId, e);
             }
         }, "notification-cache-cleaner-" + userId).start();
+    }
+
+    @Transactional
+    public void createOfferHandoverNotification(Long toUserId, Long offerId, Long itemId,
+                                                String fromItemTitle, String toItemTitle) {
+        Notification notification = new Notification();
+        notification.setUserId(toUserId);
+        notification.setType(TYPE_OFFER_HANDOVER);
+        notification.setTitle("邀约进入交接状态");
+        notification.setContent("「用 " + fromItemTitle + " 换 " + toItemTitle + "」邀约已确认进入物品交接阶段，请及时完成交接");
+        notification.setOfferId(offerId);
+        notification.setItemId(itemId);
+        notification.setReadFlag(false);
+        evictCache(toUserId);
+        notificationMapper.insert(notification);
+        scheduleDoubleDelete(toUserId);
+    }
+
+    @Transactional
+    public void createOfferCompletedNotification(Long toUserId, Long offerId, Long itemId,
+                                                 String fromItemTitle, String toItemTitle) {
+        Notification notification = new Notification();
+        notification.setUserId(toUserId);
+        notification.setType(TYPE_OFFER_COMPLETED);
+        notification.setTitle("邀约已完成交接");
+        notification.setContent("「用 " + fromItemTitle + " 换 " + toItemTitle + "」邀约已确认完成交接，现在可以去评价对方了");
+        notification.setOfferId(offerId);
+        notification.setItemId(itemId);
+        notification.setReadFlag(false);
+        evictCache(toUserId);
+        notificationMapper.insert(notification);
+        scheduleDoubleDelete(toUserId);
     }
 }

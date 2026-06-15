@@ -7,7 +7,9 @@ public enum SwapOfferStatus {
     PENDING("pending", "待处理"),
     ACCEPTED("accepted", "已接受"),
     REJECTED("rejected", "已驳回"),
-    EXPIRED("expired", "已失效");
+    EXPIRED("expired", "已失效"),
+    HANDOVER("handover", "交接中"),
+    COMPLETED("completed", "已完成");
 
     private final String code;
     private final String description;
@@ -27,9 +29,15 @@ public enum SwapOfferStatus {
     }
 
     public boolean canTransitionTo(SwapOfferStatus targetStatus) {
-        if (this != PENDING) {
-            return false;
+        switch (this) {
+            case PENDING:
+                return targetStatus == ACCEPTED || targetStatus == REJECTED || targetStatus == EXPIRED;
+            case ACCEPTED:
+                return targetStatus == HANDOVER;
+            case HANDOVER:
+                return targetStatus == COMPLETED;
+            default:
+                return false;
         }
-        return targetStatus == ACCEPTED || targetStatus == REJECTED || targetStatus == EXPIRED;
     }
 }

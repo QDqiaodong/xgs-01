@@ -11,6 +11,35 @@
           </el-tag>
         </div>
 
+        <el-divider content-position="left">
+          <span class="divider-title">互换进度</span>
+        </el-divider>
+
+        <div class="timeline-section">
+          <el-timeline>
+            <el-timeline-item
+              v-for="(node, index) in timeline"
+              :key="index"
+              :timestamp="node.time || '待完成'"
+              :color="node.color"
+              :size="node.current ? 'large' : 'normal'"
+              :icon="getTimelineIcon(node.icon)"
+              :hollow="!node.done"
+            >
+              <div class="timeline-content" :class="{ 'is-current': node.current, 'is-pending': !node.done }">
+                <div class="timeline-title">
+                  <span class="title-text">{{ node.statusText }}</span>
+                  <el-tag v-if="node.current" type="primary" size="small" effect="dark" class="current-tag">当前</el-tag>
+                </div>
+                <div class="timeline-remark" v-if="node.remark">{{ node.remark }}</div>
+                <div class="timeline-operator" v-if="node.operator">
+                  操作人：{{ node.operator }}
+                </div>
+              </div>
+            </el-timeline-item>
+          </el-timeline>
+        </div>
+
         <el-divider />
 
         <div class="offer-items-section">
@@ -79,9 +108,21 @@
             <el-button type="success" size="large" @click="handleAccept">同意邀约</el-button>
             <el-button type="danger" size="large" @click="handleReject">驳回邀约</el-button>
           </template>
+          <template v-if="offer.status === 'accepted' && !isActionLoading">
+            <el-button type="warning" size="large" :loading="actionLoading" @click="handleHandover">
+              <el-icon><Van /></el-icon>
+              确认开始交接
+            </el-button>
+          </template>
+          <template v-if="offer.status === 'handover' && !isActionLoading">
+            <el-button type="success" size="large" :loading="actionLoading" @click="handleComplete">
+              <el-icon><Finished /></el-icon>
+              确认交接完成
+            </el-button>
+          </template>
         </div>
 
-        <div class="review-section" v-if="offer.status === 'accepted'">
+        <div class="review-section" v-if="['accepted', 'handover', 'completed'].includes(offer.status)">
           <el-divider content-position="left">
             <span class="divider-title">交易评价</span>
           </el-divider>
@@ -166,13 +207,31 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, markRaw } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  Plus, Check, Close, Clock, Van, Finished, Star,
+  Switch, Scale
+} from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { useUserStore } from '@/stores/user'
 
 const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0MDAiIGhlaWdodD0iMzAwIiB2aWV3Qm94PSIwIDAgNDAwIDMwMCI+PHJlY3Qgd2lkdGg9IjQwMCIgaGVpZ2h0PSIzMDAiIGZpbGw9IiNmNWY3ZmEiLz48dGV4dCB4PSI1MCUiIHk9IjUwJSIgZm9udC1mYW1pbHk9IkFyaWFsIiBmb250LXNpemU9IjE2IiBmaWxsPSIjYzBjNGNjIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+5Zu+54mH5Liq5pWl5aSn5pWwPC90ZXh0Pjwvc3ZnPg=='
+
+const iconMap = {
+  Plus: markRaw(Plus),
+  Check: markRaw(Check),
+  Close: markRaw(Close),
+  Clock: markRaw(Clock),
+  Van: markRaw(Van),
+  Finished: markRaw(Finished),
+  Star: markRaw(Star)
+}
+
+const getTimelineIcon = (iconName) => {
+  return iconMap[iconName] || null
+}
 
 const handleImageError = (e) => {
   e.target.src = PLACEHOLDER_IMAGE
@@ -186,6 +245,8 @@ const offer = ref(null)
 const loading = ref(false)
 const showReviewDialog = ref(false)
 const submittingReview = ref(false)
+const actionLoading = ref(false)
+const timeline = ref([])
 const reviewStatus = ref({
   canReview: false,
   currentUserReviewed: false,
@@ -199,6 +260,8 @@ const reviewForm = ref({
   rating: 5,
   content: ''
 })
+
+const isActionLoading = computed(() => actionLoading.value)
 
 const formatTime = (t) => {
   if (!t) return ''
@@ -221,12 +284,26 @@ const targetItem = computed(() => {
 })
 
 const getStatusType = (status) => {
-  const map = { pending: 'warning', accepted: 'success', rejected: 'danger' }
+  const map = {
+    pending: 'warning',
+    accepted: 'success',
+    rejected: 'danger',
+    expired: 'info',
+    handover: 'warning',
+    completed: 'success'
+  }
   return map[status] || 'info'
 }
 
 const getStatusText = (status) => {
-  const map = { pending: '待回复', accepted: '已同意', rejected: '已驳回' }
+  const map = {
+    pending: '待回复',
+    accepted: '已同意',
+    rejected: '已驳回',
+    expired: '已失效',
+    handover: '交接中',
+    completed: '已完成'
+  }
   return map[status] || status
 }
 
@@ -294,6 +371,94 @@ const handleReject = async () => {
   }
 }
 
+const handleHandover = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '请确认已与对方协商好交接方式（线下见面或快递），确认后邀约将进入"交接中"状态。',
+      '确认开始交接',
+      {
+        confirmButtonText: '确认交接',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+  } catch {
+    return
+  }
+  actionLoading.value = true
+  try {
+    await api.post(`/offer/handover/${route.params.id}`, null, {
+      params: { userId: userStore.userInfo.id }
+    })
+    ElMessage.success('已确认进入交接状态')
+    loadDetail()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '操作失败，请稍后重试')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+const handleComplete = async () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '请确认物品已完成交接且双方均无异议，确认后邀约将标记为"已完成"，可进行相互评价。',
+      '确认交接完成',
+      {
+        confirmButtonText: '确认完成',
+        cancelButtonText: '取消',
+        type: 'success'
+      }
+    )
+  } catch {
+    return
+  }
+  actionLoading.value = true
+  try {
+    await api.post(`/offer/complete/${route.params.id}`, null, {
+      params: { userId: userStore.userInfo.id }
+    })
+    ElMessage.success('已确认交接完成，快去评价对方吧！')
+    loadDetail()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.message || '操作失败，请稍后重试')
+  } finally {
+    actionLoading.value = false
+  }
+}
+
+const loadTimeline = async () => {
+  try {
+    const res = await api.get(`/offer/${route.params.id}/timeline`, {
+      params: { userId: userStore.userInfo.id }
+    })
+    if (res.data.success) {
+      timeline.value = res.data.data
+      if (['completed'].includes(offer.value?.status)) {
+        const lastIdx = timeline.value.length - 1
+        if (timeline.value[lastIdx]?.status === 'reviewed') {
+          timeline.value[lastIdx].done = reviewStatus.value.currentUserReviewed && reviewStatus.value.targetUserReviewed
+          timeline.value[lastIdx].color = timeline.value[lastIdx].done ? '#67c23a' : '#c0c4cc'
+          if (reviewStatus.value.currentUserReviewed && reviewStatus.value.targetUserReviewed) {
+            timeline.value[lastIdx].time = formatTime(new Date().toISOString())
+            timeline.value[lastIdx].remark = '双方已完成相互评价'
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.log('加载时间轴失败')
+  }
+}
+
 const loadDetail = async () => {
   loading.value = true
   try {
@@ -305,7 +470,8 @@ const loadDetail = async () => {
         ...res.data.data,
         createTime: formatTime(res.data.data.createTime)
       }
-      loadReviewStatus()
+      await loadReviewStatus()
+      await loadTimeline()
     }
   } catch (e) {
     ElMessage.error('加载邀约详情失败')
@@ -344,7 +510,8 @@ const submitReview = async () => {
       ElMessage.success('评价提交成功')
       showReviewDialog.value = false
       reviewForm.value = { rating: 5, content: '' }
-      loadReviewStatus()
+      await loadReviewStatus()
+      await loadTimeline()
     } else {
       ElMessage.error(res.data.message || '评价失败')
     }
@@ -384,6 +551,96 @@ onMounted(() => {
     font-weight: 500;
     color: #303133;
   }
+}
+
+.divider-title {
+  font-size: 16px;
+  font-weight: 500;
+  color: #303133;
+}
+
+.timeline-section {
+  padding: 10px 10px 20px 10px;
+  background: linear-gradient(135deg, #f5f7fa 0%, #e8f4fd 100%);
+  border-radius: 10px;
+  margin: 10px 0 10px 0;
+
+  :deep(.el-timeline) {
+    padding-left: 10px;
+  }
+
+  :deep(.el-timeline-item__wrapper) {
+    padding-left: 20px;
+    padding-bottom: 24px;
+  }
+
+  :deep(.el-timeline-item__tail) {
+    border-left: 2px solid #e4e7ed;
+  }
+
+  :deep(.el-timeline-item__node--large) {
+    width: 18px;
+    height: 18px;
+    left: -5px;
+  }
+}
+
+.timeline-content {
+  padding: 8px 12px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #ebeef5;
+  transition: all 0.3s ease;
+
+  &.is-current {
+    background: linear-gradient(135deg, #ecf5ff 0%, #d9ecff 100%);
+    border-color: #409eff;
+    box-shadow: 0 2px 12px rgba(64, 158, 255, 0.1);
+  }
+
+  &.is-pending {
+    background: #fafafa;
+    border-style: dashed;
+    opacity: 0.8;
+  }
+}
+
+.timeline-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+
+  .title-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: #303133;
+  }
+
+  .current-tag {
+    animation: pulse 2s ease-in-out infinite;
+  }
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+.timeline-remark {
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.6;
+  margin-bottom: 4px;
+}
+
+.timeline-operator {
+  font-size: 12px;
+  color: #909399;
 }
 
 .offer-items-section {
@@ -517,22 +774,18 @@ onMounted(() => {
   justify-content: center;
   gap: 20px;
   padding-top: 24px;
+  flex-wrap: wrap;
 }
 
 .review-section {
   margin-top: 10px;
-
-  .divider-title {
-    font-size: 16px;
-    font-weight: 500;
-    color: #303133;
-  }
 
   .review-status-row {
     display: flex;
     align-items: center;
     gap: 24px;
     padding: 16px 0;
+    flex-wrap: wrap;
 
     .review-status-item {
       display: flex;
