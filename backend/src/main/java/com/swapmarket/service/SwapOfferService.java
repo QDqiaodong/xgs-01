@@ -12,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDateTime;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -27,6 +28,11 @@ public class SwapOfferService {
     private final CategoryMapper categoryMapper;
     private final NotificationService notificationService;
     private final RedisCacheService redisCacheService;
+
+    private static final long DEFAULT_OFFER_EXPIRE_HOURS = 72;
+    public static final String EXPIRE_REASON_TIMEOUT = "邀约超时未处理，自动失效";
+    public static final Long SYSTEM_OPERATOR_ID = 0L;
+    public static final String SYSTEM_OPERATOR_NAME = "系统";
 
     @Transactional
     public SwapOffer createOffer(Long fromUserId, Long fromItemId, Long toItemId, String message) {
@@ -66,12 +72,13 @@ public class SwapOfferService {
         offer.setToItemId(toItemId);
         offer.setMessage(message);
         offer.setStatus(SwapOfferStatus.PENDING.getCode());
+        offer.setExpireTime(LocalDateTime.now().plusHours(DEFAULT_OFFER_EXPIRE_HOURS));
         swapOfferMapper.insert(offer);
 
         User fromUser = userMapper.selectById(fromUserId);
         recordStatusLog(offer.getId(), null, SwapOfferStatus.PENDING.getCode(),
-                fromUserId, fromUser != null ? fromUser.getNickname() : null, "发起互换邀约");
-        log.info("用户[{}]发起互换邀约，邀约ID: {}", fromUserId, offer.getId());
+                fromUserId, fromUser != null ? fromUser.getNickname() : null, "发起互换邀约，有效期" + DEFAULT_OFFER_EXPIRE_HOURS + "小时");
+        log.info("用户[{}]发起互换邀约，邀约ID: {}，有效期至: {}", fromUserId, offer.getId(), offer.getExpireTime());
 
         notificationService.createNewOfferNotification(
                 toItem.getUserId(),
@@ -119,6 +126,8 @@ public class SwapOfferService {
             throw new RuntimeException("邀约不存在或无权操作");
         }
 
+        checkOfferExpired(offer);
+
         validateStatusTransition(offer.getStatus(), SwapOfferStatus.ACCEPTED.getCode());
 
         String oldStatus = offer.getStatus();
@@ -160,6 +169,8 @@ public class SwapOfferService {
         if (offer == null || !offer.getToUserId().equals(userId)) {
             throw new RuntimeException("邀约不存在或无权操作");
         }
+
+        checkOfferExpired(offer);
 
         validateStatusTransition(offer.getStatus(), SwapOfferStatus.REJECTED.getCode());
 
@@ -431,5 +442,88 @@ public class SwapOfferService {
             log.error("记录邀约状态变更日志失败，offerId: {}, fromStatus: {}, toStatus: {}",
                     offerId, fromStatus, toStatus, e);
         }
+    }
+
+    private void checkOfferExpired(SwapOffer offer) {
+        if (offer == null || !SwapOfferStatus.PENDING.getCode().equals(offer.getStatus())) {
+            return;
+        }
+        if (offer.getExpireTime() != null && offer.getExpireTime().isBefore(LocalDateTime.now())) {
+            expireOffer(offer, EXPIRE_REASON_TIMEOUT);
+            throw new RuntimeException("邀约已超时失效");
+        }
+    }
+
+    @Transactional
+    public void expireOffer(SwapOffer offer, String reason) {
+        if (offer == null || !SwapOfferStatus.PENDING.getCode().equals(offer.getStatus())) {
+            return;
+        }
+
+        String oldStatus = offer.getStatus();
+        offer.setStatus(SwapOfferStatus.EXPIRED.getCode());
+        offer.setExpireReason(reason);
+        swapOfferMapper.updateById(offer);
+
+        recordStatusLog(offer.getId(), oldStatus, SwapOfferStatus.EXPIRED.getCode(),
+                SYSTEM_OPERATOR_ID, SYSTEM_OPERATOR_NAME, reason);
+        log.info("互换邀约[{}]已失效，原因: {}", offer.getId(), reason);
+
+        Item fromItem = itemMapper.selectById(offer.getFromItemId());
+        Item toItem = itemMapper.selectById(offer.getToItemId());
+
+        notificationService.createOfferExpiredNotification(
+                offer.getFromUserId(),
+                offer.getId(),
+                offer.getToItemId(),
+                fromItem != null ? fromItem.getTitle() : "",
+                toItem != null ? toItem.getTitle() : "",
+                reason
+        );
+        notificationService.createOfferExpiredNotification(
+                offer.getToUserId(),
+                offer.getId(),
+                offer.getToItemId(),
+                fromItem != null ? fromItem.getTitle() : "",
+                toItem != null ? toItem.getTitle() : "",
+                reason
+        );
+
+        clearUserOfferCaches(offer.getFromUserId());
+        clearUserOfferCaches(offer.getToUserId());
+    }
+
+    @Transactional
+    public int processExpiredOffers() {
+        List<SwapOffer> expiredOffers = swapOfferMapper.selectList(
+                new LambdaQueryWrapper<SwapOffer>()
+                        .eq(SwapOffer::getStatus, SwapOfferStatus.PENDING.getCode())
+                        .isNotNull(SwapOffer::getExpireTime)
+                        .lt(SwapOffer::getExpireTime, LocalDateTime.now())
+        );
+
+        if (expiredOffers.isEmpty()) {
+            return 0;
+        }
+
+        log.info("发现 {} 条超时未处理的互换邀约，开始处理", expiredOffers.size());
+        int count = 0;
+        for (SwapOffer offer : expiredOffers) {
+            try {
+                expireOffer(offer, EXPIRE_REASON_TIMEOUT);
+                count++;
+            } catch (Exception e) {
+                log.error("处理超时邀约失败，offerId: {}", offer.getId(), e);
+            }
+        }
+        log.info("超时邀约处理完成，成功失效 {} 条", count);
+        return count;
+    }
+
+    public boolean isOfferExpired(SwapOffer offer) {
+        if (offer == null || offer.getExpireTime() == null) {
+            return false;
+        }
+        return offer.getExpireTime().isBefore(LocalDateTime.now());
     }
 }

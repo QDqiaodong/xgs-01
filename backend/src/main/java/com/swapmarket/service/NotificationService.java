@@ -38,6 +38,7 @@ public class NotificationService {
     public static final String TYPE_NEW_OFFER = "new_offer";
     public static final String TYPE_OFFER_ACCEPTED = "offer_accepted";
     public static final String TYPE_OFFER_REJECTED = "offer_rejected";
+    public static final String TYPE_OFFER_EXPIRED = "offer_expired";
     public static final String TYPE_NEW_REVIEW = "new_review";
 
     private long getTtlWithJitterMinutes() {
@@ -159,6 +160,22 @@ public class NotificationService {
         evictCache(fromUserId);
         notificationMapper.insert(notification);
         scheduleDoubleDelete(fromUserId);
+    }
+
+    @Transactional
+    public void createOfferExpiredNotification(Long userId, Long offerId, Long itemId,
+                                               String fromItemTitle, String toItemTitle, String reason) {
+        Notification notification = new Notification();
+        notification.setUserId(userId);
+        notification.setType(TYPE_OFFER_EXPIRED);
+        notification.setTitle("邀约已失效");
+        notification.setContent("「用 " + fromItemTitle + " 换 " + toItemTitle + "」邀约已失效，原因：" + reason);
+        notification.setOfferId(offerId);
+        notification.setItemId(itemId);
+        notification.setReadFlag(false);
+        evictCache(userId);
+        notificationMapper.insert(notification);
+        scheduleDoubleDelete(userId);
     }
 
     @Transactional

@@ -111,6 +111,10 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             {"idx_create_time", "CREATE INDEX idx_create_time ON swap_offer_status_log(create_time)"}
     };
 
+    private static final String[][] SWAP_OFFER_INDEXES = {
+            {"idx_expire_time", "CREATE INDEX idx_expire_time ON swap_offer(expire_time)"}
+    };
+
     @Override
     public void run(ApplicationArguments args) {
         try {
@@ -119,6 +123,7 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             migrateItemLikeCountColumn();
             migrateReportTable();
             migrateSwapOfferStatusLogTable();
+            migrateSwapOfferExpireColumns();
         } catch (Exception e) {
             log.error("数据库迁移执行失败，如相关功能异常请检查数据库权限：{}", e.getMessage());
         }
@@ -335,6 +340,43 @@ public class DatabaseMigrationRunner implements ApplicationRunner {
             }
         } catch (Exception e) {
             log.error("swap_offer_status_log 表迁移失败: {}", e.getMessage());
+        }
+    }
+
+    private void migrateSwapOfferExpireColumns() {
+        try (Connection conn = dataSource.getConnection()) {
+            String databaseName = getCurrentDatabase(conn);
+            if (databaseName == null) {
+                log.warn("无法获取当前数据库名，跳过 swap_offer 有效期字段迁移");
+                return;
+            }
+
+            if (!tableExists(conn, databaseName, "swap_offer")) {
+                log.warn("swap_offer 表不存在，跳过有效期字段迁移");
+                return;
+            }
+
+            if (!columnExists(conn, databaseName, "swap_offer", "expire_time")) {
+                log.info("检测到 swap_offer.expire_time 字段不存在，开始添加...");
+                String alterSql = "ALTER TABLE swap_offer ADD COLUMN expire_time DATETIME";
+                execute(conn, alterSql);
+                log.info("swap_offer.expire_time 字段添加完成");
+            } else {
+                log.debug("swap_offer.expire_time 字段已存在，跳过添加");
+            }
+
+            if (!columnExists(conn, databaseName, "swap_offer", "expire_reason")) {
+                log.info("检测到 swap_offer.expire_reason 字段不存在，开始添加...");
+                String alterSql = "ALTER TABLE swap_offer ADD COLUMN expire_reason VARCHAR(500)";
+                execute(conn, alterSql);
+                log.info("swap_offer.expire_reason 字段添加完成");
+            } else {
+                log.debug("swap_offer.expire_reason 字段已存在，跳过添加");
+            }
+
+            ensureIndexes(conn, databaseName, "swap_offer", SWAP_OFFER_INDEXES);
+        } catch (Exception e) {
+            log.error("swap_offer 有效期字段迁移失败: {}", e.getMessage());
         }
     }
 }

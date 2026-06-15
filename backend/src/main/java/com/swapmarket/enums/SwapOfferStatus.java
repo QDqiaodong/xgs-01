@@ -6,7 +6,8 @@ import lombok.Getter;
 public enum SwapOfferStatus {
     PENDING("pending", "待处理"),
     ACCEPTED("accepted", "已接受"),
-    REJECTED("rejected", "已驳回");
+    REJECTED("rejected", "已驳回"),
+    EXPIRED("expired", "已失效");
 
     private final String code;
     private final String description;
@@ -29,6 +30,6 @@ public enum SwapOfferStatus {
         if (this != PENDING) {
             return false;
         }
-        return targetStatus == ACCEPTED || targetStatus == REJECTED;
+        return targetStatus == ACCEPTED || targetStatus == REJECTED || targetStatus == EXPIRED;
     }
 }

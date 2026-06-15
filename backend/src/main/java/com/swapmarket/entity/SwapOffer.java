@@ -21,6 +21,10 @@ public class SwapOffer {
     private String message;
     
     private String status;
+
+    private LocalDateTime expireTime;
+
+    private String expireReason;
     
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;

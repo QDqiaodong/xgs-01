@@ -65,12 +65,15 @@ CREATE TABLE IF NOT EXISTS swap_offer (
     to_item_id BIGINT NOT NULL,
     message TEXT,
     status VARCHAR(20) DEFAULT 'pending',
+    expire_time DATETIME,
+    expire_reason VARCHAR(500),
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT DEFAULT 0,
     INDEX idx_from_user(from_user_id),
     INDEX idx_to_user(to_user_id),
-    INDEX idx_status(status)
+    INDEX idx_status(status),
+    INDEX idx_expire_time(expire_time)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS favorite (
