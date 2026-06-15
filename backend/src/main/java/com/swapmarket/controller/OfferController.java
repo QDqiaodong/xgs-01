@@ -3,11 +3,14 @@ package com.swapmarket.controller;
 import com.swapmarket.common.Result;
 import com.swapmarket.entity.SwapOffer;
 import com.swapmarket.service.SwapOfferService;
+import com.swapmarket.vo.SwapComparisonVO;
 import lombok.Data;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/offer")
@@ -64,6 +67,43 @@ public class OfferController {
     @GetMapping("/pending-count")
     public Result<Integer> getPendingOfferCount(@RequestParam(defaultValue = "1") Long userId) {
         return Result.success(swapOfferService.getPendingOfferCount(userId));
+    }
+
+    @GetMapping("/{id}/comparison")
+    public Result<SwapComparisonVO> getComparisonData(@RequestParam(defaultValue = "1") Long userId,
+                                                      @PathVariable Long id) {
+        return Result.success(swapOfferService.getComparisonData(userId, id));
+    }
+
+    @GetMapping("/{id}/comparison/export")
+    public Result<Map<String, Object>> exportComparisonSummary(@RequestParam(defaultValue = "1") Long userId,
+                                                               @PathVariable Long id) {
+        SwapComparisonVO comparison = swapOfferService.getComparisonData(userId, id);
+        Map<String, Object> summary = new HashMap<>();
+        summary.put("offerId", comparison.getOfferId());
+        summary.put("offerStatus", comparison.getOfferStatus());
+        summary.put("createTime", comparison.getCreateTime());
+        summary.put("fromUser", comparison.getFromUserNickname());
+        summary.put("toUser", comparison.getToUserNickname());
+        summary.put("fromItemTitle", comparison.getFromItem() != null ? comparison.getFromItem().getTitle() : "");
+        summary.put("toItemTitle", comparison.getToItem() != null ? comparison.getToItem().getTitle() : "");
+        summary.put("differentCount", comparison.getDifferentCount());
+        summary.put("totalCount", comparison.getTotalCount());
+        summary.put("offerMessage", comparison.getOfferMessage());
+
+        List<Map<String, Object>> checklistSummary = comparison.getChecklist().stream()
+                .map(item -> {
+                    Map<String, Object> map = new HashMap<>();
+                    map.put("fieldLabel", item.getFieldLabel());
+                    map.put("isDifferent", item.getIsDifferent());
+                    map.put("fromValue", item.getIsImageField() ? "[图片]" : item.getFromValue());
+                    map.put("toValue", item.getIsImageField() ? "[图片]" : item.getToValue());
+                    return map;
+                })
+                .toList();
+        summary.put("checklist", checklistSummary);
+
+        return Result.success(summary);
     }
 
     @Data

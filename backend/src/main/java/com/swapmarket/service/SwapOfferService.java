@@ -6,6 +6,7 @@ import com.swapmarket.entity.*;
 import com.swapmarket.enums.SwapOfferStatus;
 import com.swapmarket.exception.BusinessException;
 import com.swapmarket.mapper.*;
+import com.swapmarket.vo.*;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -23,6 +24,7 @@ public class SwapOfferService {
     private final ItemMapper itemMapper;
     private final ItemImageMapper itemImageMapper;
     private final UserMapper userMapper;
+    private final CategoryMapper categoryMapper;
     private final NotificationService notificationService;
     private final RedisCacheService redisCacheService;
 
@@ -280,6 +282,143 @@ public class SwapOfferService {
         if (!current.canTransitionTo(target)) {
             throw BusinessException.invalidStatusTransition(currentStatus, targetStatus);
         }
+    }
+
+    public SwapComparisonVO getComparisonData(Long userId, Long offerId) {
+        SwapOffer offer = swapOfferMapper.selectById(offerId);
+        if (offer == null) {
+            throw new RuntimeException("邀约不存在");
+        }
+        if (!offer.getFromUserId().equals(userId) && !offer.getToUserId().equals(userId)) {
+            throw new RuntimeException("无权查看该邀约");
+        }
+
+        Item fromItem = itemMapper.selectById(offer.getFromItemId());
+        Item toItem = itemMapper.selectById(offer.getToItemId());
+        User fromUser = userMapper.selectById(offer.getFromUserId());
+        User toUser = userMapper.selectById(offer.getToUserId());
+
+        List<String> fromImages = itemImageMapper.selectList(new LambdaQueryWrapper<ItemImage>()
+                        .eq(ItemImage::getItemId, offer.getFromItemId())
+                        .orderByAsc(ItemImage::getSortOrder))
+                .stream()
+                .map(ItemImage::getImageUrl)
+                .collect(Collectors.toList());
+
+        List<String> toImages = itemImageMapper.selectList(new LambdaQueryWrapper<ItemImage>()
+                        .eq(ItemImage::getItemId, offer.getToItemId())
+                        .orderByAsc(ItemImage::getSortOrder))
+                .stream()
+                .map(ItemImage::getImageUrl)
+                .collect(Collectors.toList());
+
+        Category fromCategory = fromItem != null ? categoryMapper.selectById(fromItem.getCategoryId()) : null;
+        Category toCategory = toItem != null ? categoryMapper.selectById(toItem.getCategoryId()) : null;
+
+        SwapComparisonItemVO fromItemVO = new SwapComparisonItemVO();
+        if (fromItem != null) {
+            fromItemVO.setItemId(fromItem.getId());
+            fromItemVO.setTitle(fromItem.getTitle());
+            fromItemVO.setImages(fromImages);
+            fromItemVO.setDescription(fromItem.getDescription());
+            fromItemVO.setCondition(fromItem.getCondition());
+            fromItemVO.setExpectedSwap(fromItem.getExpectedSwap());
+            fromItemVO.setCategoryName(fromCategory != null ? fromCategory.getName() : "");
+            fromItemVO.setPublisherName(fromUser != null ? fromUser.getNickname() : "");
+        }
+
+        SwapComparisonItemVO toItemVO = new SwapComparisonItemVO();
+        if (toItem != null) {
+            toItemVO.setItemId(toItem.getId());
+            toItemVO.setTitle(toItem.getTitle());
+            toItemVO.setImages(toImages);
+            toItemVO.setDescription(toItem.getDescription());
+            toItemVO.setCondition(toItem.getCondition());
+            toItemVO.setExpectedSwap(toItem.getExpectedSwap());
+            toItemVO.setCategoryName(toCategory != null ? toCategory.getName() : "");
+            toItemVO.setPublisherName(toUser != null ? toUser.getNickname() : "");
+        }
+
+        List<SwapComparisonChecklistItemVO> checklist = buildChecklist(fromItem, toItem, fromImages, toImages);
+
+        long diffCount = checklist.stream().filter(item -> Boolean.TRUE.equals(item.getIsDifferent())).count();
+
+        SwapComparisonVO vo = new SwapComparisonVO();
+        vo.setOfferId(offer.getId());
+        vo.setOfferStatus(offer.getStatus());
+        vo.setOfferMessage(offer.getMessage());
+        vo.setCreateTime(offer.getCreateTime() != null ? offer.getCreateTime().toString().replace("T", " ") : "");
+        vo.setFromItem(fromItemVO);
+        vo.setToItem(toItemVO);
+        vo.setChecklist(checklist);
+        vo.setDifferentCount((int) diffCount);
+        vo.setTotalCount(checklist.size());
+        vo.setFromUserNickname(fromUser != null ? fromUser.getNickname() : "");
+        vo.setToUserNickname(toUser != null ? toUser.getNickname() : "");
+
+        return vo;
+    }
+
+    private List<SwapComparisonChecklistItemVO> buildChecklist(Item fromItem, Item toItem,
+                                                               List<String> fromImages, List<String> toImages) {
+        List<SwapComparisonChecklistItemVO> checklist = new ArrayList<>();
+
+        SwapComparisonChecklistItemVO imagesItem = new SwapComparisonChecklistItemVO();
+        imagesItem.setFieldName("images");
+        imagesItem.setFieldLabel("图片");
+        imagesItem.setFromValue(String.join("|", fromImages));
+        imagesItem.setToValue(String.join("|", toImages));
+        imagesItem.setIsDifferent(fromImages.size() != toImages.size());
+        imagesItem.setIsImageField(true);
+        checklist.add(imagesItem);
+
+        SwapComparisonChecklistItemVO titleItem = new SwapComparisonChecklistItemVO();
+        titleItem.setFieldName("title");
+        titleItem.setFieldLabel("标题");
+        titleItem.setFromValue(fromItem != null ? fromItem.getTitle() : "");
+        titleItem.setToValue(toItem != null ? toItem.getTitle() : "");
+        titleItem.setIsDifferent(!safeEquals(fromItem != null ? fromItem.getTitle() : null,
+                toItem != null ? toItem.getTitle() : null));
+        titleItem.setIsImageField(false);
+        checklist.add(titleItem);
+
+        SwapComparisonChecklistItemVO descItem = new SwapComparisonChecklistItemVO();
+        descItem.setFieldName("description");
+        descItem.setFieldLabel("描述");
+        descItem.setFromValue(fromItem != null ? fromItem.getDescription() : "");
+        descItem.setToValue(toItem != null ? toItem.getDescription() : "");
+        descItem.setIsDifferent(!safeEquals(fromItem != null ? fromItem.getDescription() : null,
+                toItem != null ? toItem.getDescription() : null));
+        descItem.setIsImageField(false);
+        checklist.add(descItem);
+
+        SwapComparisonChecklistItemVO conditionItem = new SwapComparisonChecklistItemVO();
+        conditionItem.setFieldName("condition");
+        conditionItem.setFieldLabel("成色");
+        conditionItem.setFromValue(fromItem != null ? fromItem.getCondition() : "");
+        conditionItem.setToValue(toItem != null ? toItem.getCondition() : "");
+        conditionItem.setIsDifferent(!safeEquals(fromItem != null ? fromItem.getCondition() : null,
+                toItem != null ? toItem.getCondition() : null));
+        conditionItem.setIsImageField(false);
+        checklist.add(conditionItem);
+
+        SwapComparisonChecklistItemVO expectedItem = new SwapComparisonChecklistItemVO();
+        expectedItem.setFieldName("expectedSwap");
+        expectedItem.setFieldLabel("期望交换");
+        expectedItem.setFromValue(fromItem != null ? fromItem.getExpectedSwap() : "");
+        expectedItem.setToValue(toItem != null ? toItem.getExpectedSwap() : "");
+        expectedItem.setIsDifferent(!safeEquals(fromItem != null ? fromItem.getExpectedSwap() : null,
+                toItem != null ? toItem.getExpectedSwap() : null));
+        expectedItem.setIsImageField(false);
+        checklist.add(expectedItem);
+
+        return checklist;
+    }
+
+    private boolean safeEquals(String a, String b) {
+        if (a == null && b == null) return true;
+        if (a == null || b == null) return false;
+        return a.equals(b);
     }
 
     private void recordStatusLog(Long offerId, String fromStatus, String toStatus,

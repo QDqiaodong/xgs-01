@@ -45,6 +45,11 @@ const routes = [
     path: '/reports',
     name: 'Reports',
     component: () => import('@/views/Reports.vue')
+  },
+  {
+    path: '/offer/:id/comparison',
+    name: 'ComparisonWorkbench',
+    component: () => import('@/views/ComparisonWorkbench.vue')
   }
 ]
 

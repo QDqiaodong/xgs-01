@@ -70,9 +70,15 @@
           <div class="message-content">{{ offer.message }}</div>
         </div>
 
-        <div class="offer-actions" v-if="isReceived && offer.status === 'pending'">
-          <el-button type="success" size="large" @click="handleAccept">同意邀约</el-button>
-          <el-button type="danger" size="large" @click="handleReject">驳回邀约</el-button>
+        <div class="offer-actions">
+          <el-button type="primary" size="large" @click="goToComparison">
+            <el-icon><Scale /></el-icon>
+            成色对比工作台
+          </el-button>
+          <template v-if="isReceived && offer.status === 'pending'">
+            <el-button type="success" size="large" @click="handleAccept">同意邀约</el-button>
+            <el-button type="danger" size="large" @click="handleReject">驳回邀约</el-button>
+          </template>
         </div>
 
         <div class="review-section" v-if="offer.status === 'accepted'">
@@ -232,6 +238,10 @@ const goToItemDetail = (id) => {
   if (id) {
     router.push(`/detail/${id}`)
   }
+}
+
+const goToComparison = () => {
+  router.push(`/offer/${route.params.id}/comparison`)
 }
 
 const handleAccept = async () => {
