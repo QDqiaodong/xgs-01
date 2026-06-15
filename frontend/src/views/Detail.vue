@@ -60,6 +60,14 @@
                       <component :is="isFavorited(item.id) ? 'HeartFilled' : 'Heart'" />
                     </el-icon>
                   </button>
+                  <button
+                    class="share-btn"
+                    @click.stop="handleOpenShareDialog"
+                  >
+                    <el-icon :size="28">
+                      <Share />
+                    </el-icon>
+                  </button>
                 </div>
               </div>
               
@@ -193,6 +201,90 @@
           <el-button type="danger" @click="submitReport" :loading="reportSubmitting">提交举报</el-button>
         </template>
       </el-dialog>
+
+      <el-dialog v-model="showShareDialog" title="分享物品" width="500px" class="share-dialog">
+        <div class="share-content">
+          <div class="share-preview" v-if="item">
+            <img :src="item.images?.[0] || PLACEHOLDER_IMAGE" class="share-preview-img" @error="handleShareImageError" />
+            <div class="share-preview-info">
+              <div class="share-preview-title">{{ item.title }}</div>
+              <div class="share-preview-meta">
+                <el-tag size="small" type="primary" effect="plain">{{ item.categoryName }}</el-tag>
+                <span>{{ item.condition }}</span>
+              </div>
+            </div>
+          </div>
+
+          <el-divider />
+
+          <div class="share-actions">
+            <el-button type="primary" size="large" @click="handleCopyLink" :loading="copyingLink">
+              <el-icon><Link /></el-icon>
+              复制分享链接
+            </el-button>
+            <el-button type="success" size="large" @click="handleGeneratePoster" :loading="generatingPoster">
+              <el-icon><Picture /></el-icon>
+              生成分享海报
+            </el-button>
+          </div>
+
+          <el-divider />
+
+          <div class="share-link-section" v-if="shareLink">
+            <div class="share-link-label">分享链接：</div>
+            <div class="share-link-box">
+              <span class="share-link-text">{{ shareLink }}</span>
+              <el-button type="primary" text @click="handleCopyLink">
+                <el-icon><DocumentCopy /></el-icon>
+                复制
+              </el-button>
+            </div>
+          </div>
+
+          <div class="share-tip">
+            <el-icon color="#e6a23c"><InfoFilled /></el-icon>
+            <span>分享链接包含您的专属标识，好友通过链接访问时将自动记录为您的分享</span>
+          </div>
+        </div>
+      </el-dialog>
+
+      <el-dialog v-model="showPosterDialog" title="分享海报" width="420px" class="poster-dialog">
+        <div class="poster-content">
+          <div class="poster-container" ref="posterContainer">
+            <div class="poster-header">
+              <div class="poster-logo">
+                <el-icon :size="32" color="#409eff"><ShoppingCart /></el-icon>
+                <span class="poster-title">闲置互换</span>
+              </div>
+              <div class="poster-subtitle">发现好物，以物换物</div>
+            </div>
+            <div class="poster-body" v-if="item">
+              <img :src="item.images?.[0] || PLACEHOLDER_IMAGE" class="poster-image" @error="handlePosterImageError" />
+              <div class="poster-item-info">
+                <div class="poster-item-title">{{ item.title }}</div>
+                <div class="poster-item-meta">
+                  <el-tag size="small" type="primary" effect="plain">{{ item.categoryName }}</el-tag>
+                  <el-tag size="small" effect="plain">{{ item.condition }}</el-tag>
+                </div>
+                <div class="poster-item-desc">{{ item.description }}</div>
+              </div>
+              <div class="poster-qr-section">
+                <div class="poster-qr-code" ref="qrCodeContainer"></div>
+                <div class="poster-qr-tip">
+                  <div>扫码查看详情</div>
+                  <div class="poster-share-by">分享者：{{ userStore.userInfo?.nickname || '用户' }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="poster-actions">
+            <el-button type="primary" size="large" @click="handleDownloadPoster" :loading="downloadingPoster">
+              <el-icon><Download /></el-icon>
+              保存海报
+            </el-button>
+          </div>
+        </div>
+      </el-dialog>
     </template>
 
     <el-empty v-else description="物品详情加载失败" />
@@ -206,11 +298,10 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
-import { Picture, Star, StarFilled } from '@element-plus/icons-vue'
-import { Plus } from '@element-plus/icons-vue'
+import { Picture, Star, StarFilled, Plus, Share, Link, DocumentCopy, InfoFilled, ShoppingCart, Download } from '@element-plus/icons-vue'
 import api from '@/utils/api'
 import { getCategoryName } from '@/utils/category'
 import { useFavoriteStore } from '@/stores/favorite'
@@ -218,6 +309,8 @@ import { useLikeStore } from '@/stores/like'
 import { useUserStore } from '@/stores/user'
 import { useHistoryStore } from '@/stores/history'
 import ImagePreview from '@/components/ImagePreview.vue'
+import QRCode from 'qrcode'
+import html2canvas from 'html2canvas'
 
 const router = useRouter()
 const route = useRoute()
@@ -236,6 +329,14 @@ const showPreview = ref(false)
 const previewIndex = ref(0)
 const showReportDialog = ref(false)
 const reportSubmitting = ref(false)
+const showShareDialog = ref(false)
+const showPosterDialog = ref(false)
+const shareLink = ref('')
+const copyingLink = ref(false)
+const generatingPoster = ref(false)
+const downloadingPoster = ref(false)
+const posterContainer = ref(null)
+const qrCodeContainer = ref(null)
 
 const reportForm = ref({
   reasonType: '',
@@ -370,6 +471,9 @@ const loadDetail = async () => {
     if (userStore.isLoggedIn && userStore.userInfo.id) {
       params.userId = userStore.userInfo.id
     }
+    if (route.query.sharerId) {
+      params.sharerId = route.query.sharerId
+    }
     const res = await api.get(`/item/${route.params.id}`, { params })
     if (res.data.success) {
       item.value = res.data.data
@@ -393,6 +497,128 @@ const loadDetail = async () => {
     currentImage.value = PLACEHOLDER_IMAGE
     ElMessage.error('加载物品详情失败')
   }
+}
+
+const generateShareLink = () => {
+  if (!item.value || !userStore.isLoggedIn || !userStore.userInfo.id) {
+    return ''
+  }
+  const baseUrl = window.location.origin
+  return `${baseUrl}/detail/${item.value.id}?sharerId=${userStore.userInfo.id}`
+}
+
+const handleOpenShareDialog = () => {
+  if (!userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录后再分享')
+    return
+  }
+  shareLink.value = generateShareLink()
+  showShareDialog.value = true
+}
+
+const handleCopyLink = async () => {
+  if (!shareLink.value) {
+    shareLink.value = generateShareLink()
+  }
+  if (!shareLink.value) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  copyingLink.value = true
+  try {
+    await navigator.clipboard.writeText(shareLink.value)
+    await recordShare('link')
+    ElMessage.success('分享链接已复制到剪贴板')
+  } catch (e) {
+    ElMessage.error('复制失败，请手动复制')
+  } finally {
+    copyingLink.value = false
+  }
+}
+
+const handleGeneratePoster = async () => {
+  if (!item.value || !userStore.isLoggedIn || !userStore.userInfo.id) {
+    ElMessage.warning('请先登录')
+    return
+  }
+  generatingPoster.value = true
+  try {
+    shareLink.value = generateShareLink()
+    showShareDialog.value = false
+    showPosterDialog.value = true
+    await nextTick()
+    await generateQRCode()
+    await recordShare('poster')
+  } catch (e) {
+    ElMessage.error('生成海报失败，请重试')
+  } finally {
+    generatingPoster.value = false
+  }
+}
+
+const generateQRCode = async () => {
+  if (!qrCodeContainer.value || !shareLink.value) return
+  try {
+    qrCodeContainer.value.innerHTML = ''
+    await QRCode.toCanvas(qrCodeContainer.value, shareLink.value, {
+      width: 120,
+      margin: 1,
+      color: {
+        dark: '#303133',
+        light: '#ffffff'
+      }
+    })
+  } catch (e) {
+    console.error('QR code generation failed:', e)
+  }
+}
+
+const handleDownloadPoster = async () => {
+  if (!posterContainer.value) return
+  downloadingPoster.value = true
+  try {
+    const canvas = await html2canvas(posterContainer.value, {
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+      scale: 2
+    })
+    const link = document.createElement('a')
+    link.download = `分享海报_${item.value?.title || '物品'}_${Date.now()}.png`
+    link.href = canvas.toDataURL('image/png')
+    link.click()
+    ElMessage.success('海报已保存到本地')
+  } catch (e) {
+    console.error('Poster download failed:', e)
+    ElMessage.error('保存海报失败，请重试')
+  } finally {
+    downloadingPoster.value = false
+  }
+}
+
+const recordShare = async (shareType) => {
+  if (!item.value || !userStore.isLoggedIn || !userStore.userInfo.id) return
+  try {
+    await api.post(`/item/share/${item.value.id}`, null, {
+      params: {
+        userId: userStore.userInfo.id,
+        shareType: shareType
+      }
+    })
+    if (item.value) {
+      item.value.shareCount = (item.value.shareCount || 0) + 1
+    }
+  } catch (e) {
+    console.error('Record share failed:', e)
+  }
+}
+
+const handleShareImageError = (e) => {
+  e.target.src = PLACEHOLDER_IMAGE
+}
+
+const handlePosterImageError = (e) => {
+  e.target.src = PLACEHOLDER_IMAGE
 }
 
 const loadMyItems = async () => {
@@ -708,6 +934,26 @@ onMounted(() => {
     }
   }
 
+  .share-btn {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s;
+    color: #c0c4cc;
+    flex-shrink: 0;
+
+    &:hover {
+      background: #ecf5ff;
+      color: #409eff;
+      transform: scale(1.1);
+    }
+  }
+
   .item-meta {
     display: flex;
     align-items: center;
@@ -789,6 +1035,230 @@ onMounted(() => {
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
+  }
+}
+
+:deep(.share-dialog) {
+  .share-content {
+    .share-preview {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+
+      .share-preview-img {
+        width: 80px;
+        height: 80px;
+        object-fit: cover;
+        border-radius: 8px;
+        background: #f5f7fa;
+        flex-shrink: 0;
+      }
+
+      .share-preview-info {
+        flex: 1;
+        min-width: 0;
+
+        .share-preview-title {
+          font-size: 16px;
+          font-weight: 600;
+          color: #303133;
+          margin-bottom: 8px;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
+
+        .share-preview-meta {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 13px;
+          color: #909399;
+        }
+      }
+    }
+
+    .share-actions {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+
+      .el-button {
+        flex: 1;
+        max-width: 200px;
+      }
+    }
+
+    .share-link-section {
+      .share-link-label {
+        font-size: 14px;
+        font-weight: 500;
+        color: #303133;
+        margin-bottom: 8px;
+      }
+
+      .share-link-box {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 12px 16px;
+        background: #f5f7fa;
+        border-radius: 8px;
+
+        .share-link-text {
+          flex: 1;
+          font-size: 13px;
+          color: #606266;
+          word-break: break-all;
+          overflow: hidden;
+          text-overflow: ellipsis;
+          display: -webkit-box;
+          -webkit-line-clamp: 2;
+          -webkit-box-orient: vertical;
+        }
+      }
+    }
+
+    .share-tip {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      padding: 12px 16px;
+      background: #fdf6ec;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #e6a23c;
+      line-height: 1.6;
+    }
+  }
+}
+
+:deep(.poster-dialog) {
+  .poster-content {
+    .poster-container {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 20px;
+
+      .poster-header {
+        text-align: center;
+        margin-bottom: 16px;
+        color: white;
+
+        .poster-logo {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 8px;
+          margin-bottom: 4px;
+
+          .poster-title {
+            font-size: 20px;
+            font-weight: 700;
+          }
+        }
+
+        .poster-subtitle {
+          font-size: 13px;
+          opacity: 0.9;
+        }
+      }
+
+      .poster-body {
+        background: white;
+        border-radius: 8px;
+        padding: 16px;
+
+        .poster-image {
+          width: 100%;
+          height: 200px;
+          object-fit: cover;
+          border-radius: 8px;
+          background: #f5f7fa;
+          margin-bottom: 12px;
+        }
+
+        .poster-item-info {
+          margin-bottom: 16px;
+
+          .poster-item-title {
+            font-size: 16px;
+            font-weight: 600;
+            color: #303133;
+            margin-bottom: 8px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+          }
+
+          .poster-item-meta {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 8px;
+          }
+
+          .poster-item-desc {
+            font-size: 13px;
+            color: #606266;
+            line-height: 1.6;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+          }
+        }
+
+        .poster-qr-section {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          padding-top: 16px;
+          border-top: 1px dashed #ebeef5;
+
+          .poster-qr-code {
+            flex-shrink: 0;
+            width: 120px;
+            height: 120px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: white;
+            border: 1px solid #ebeef5;
+            border-radius: 8px;
+
+            canvas {
+              width: 100% !important;
+              height: 100% !important;
+            }
+          }
+
+          .poster-qr-tip {
+            flex: 1;
+            font-size: 13px;
+            color: #606266;
+            line-height: 1.8;
+
+            .poster-share-by {
+              margin-top: 8px;
+              font-weight: 500;
+              color: #409eff;
+            }
+          }
+        }
+      }
+    }
+
+    .poster-actions {
+      display: flex;
+      justify-content: center;
+
+      .el-button {
+        min-width: 200px;
+      }
+    }
   }
 }
 </style>

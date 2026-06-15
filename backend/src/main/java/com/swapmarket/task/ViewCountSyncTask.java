@@ -19,6 +19,7 @@ public class ViewCountSyncTask {
     private final ItemMapper itemMapper;
 
     private static final String VIEW_PENDING_KEY = "swap:view:pending";
+    private static final String SHARE_PENDING_KEY = "swap:share:pending";
 
     @Scheduled(fixedRate = 300000)
     public void syncViewCountToDatabase() {
@@ -48,5 +49,35 @@ public class ViewCountSyncTask {
         }
 
         log.info("浏览量同步完成，成功: {}, 失败: {}", successCount, failCount);
+    }
+
+    @Scheduled(fixedRate = 300000)
+    public void syncShareCountToDatabase() {
+        Map<Object, Object> pendingShares = stringRedisTemplate.opsForHash().entries(SHARE_PENDING_KEY);
+        if (pendingShares.isEmpty()) {
+            return;
+        }
+
+        log.info("开始同步分享量数据，共 {} 条记录", pendingShares.size());
+
+        Set<Map.Entry<Object, Object>> entries = pendingShares.entrySet();
+        int successCount = 0;
+        int failCount = 0;
+
+        for (Map.Entry<Object, Object> entry : entries) {
+            try {
+                Long itemId = Long.valueOf(entry.getKey().toString());
+                Integer increment = Integer.valueOf(entry.getValue().toString());
+
+                itemMapper.updateShareCount(itemId, increment);
+                stringRedisTemplate.opsForHash().delete(SHARE_PENDING_KEY, entry.getKey().toString());
+                successCount++;
+            } catch (Exception e) {
+                log.error("同步物品分享量失败, itemId={}, increment={}", entry.getKey(), entry.getValue(), e);
+                failCount++;
+            }
+        }
+
+        log.info("分享量同步完成，成功: {}, 失败: {}", successCount, failCount);
     }
 }

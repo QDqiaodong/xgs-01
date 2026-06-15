@@ -137,6 +137,7 @@ public class ItemService {
         item.setIsTop(0);
         item.setViewCount(0);
         item.setLikeCount(0);
+        item.setShareCount(0);
         itemMapper.insert(item);
 
         if (images != null && !images.isEmpty()) {
@@ -242,6 +243,12 @@ public class ItemService {
             item.setImages(imageMap.getOrDefault(item.getId(), new ArrayList<>()));
             if (item.getLikeCount() == null) {
                 item.setLikeCount(0);
+            }
+            if (item.getShareCount() == null) {
+                item.setShareCount(0);
+            }
+            if (item.getViewCount() == null) {
+                item.setViewCount(0);
             }
             User publisher = userMap.get(item.getUserId());
             item.setPublisher(publisher);
@@ -418,10 +425,21 @@ public class ItemService {
         }
 
         List<Item> items = itemMapper.selectList(new LambdaQueryWrapper<Item>()
-                .eq(Item::getStatus, "published")
-                .orderByDesc(Item::getLikeCount)
-                .orderByDesc(Item::getCreateTime)
-                .last("LIMIT " + Math.min(limit, 100)));
+                .eq(Item::getStatus, "published"));
+
+        items.sort((a, b) -> {
+            double scoreA = calculatePopularityScore(a);
+            double scoreB = calculatePopularityScore(b);
+            int scoreCompare = Double.compare(scoreB, scoreA);
+            if (scoreCompare != 0) {
+                return scoreCompare;
+            }
+            return b.getCreateTime().compareTo(a.getCreateTime());
+        });
+
+        if (items.size() > Math.min(limit, 100)) {
+            items = items.subList(0, Math.min(limit, 100));
+        }
 
         enrichItems(items);
 
@@ -432,6 +450,13 @@ public class ItemService {
             enrichItems(items, userId);
         }
         return items;
+    }
+
+    private double calculatePopularityScore(Item item) {
+        int likeCount = item.getLikeCount() != null ? item.getLikeCount() : 0;
+        int shareCount = item.getShareCount() != null ? item.getShareCount() : 0;
+        int viewCount = item.getViewCount() != null ? item.getViewCount() : 0;
+        return likeCount * 3.0 + shareCount * 5.0 + viewCount * 1.0;
     }
 
     private void clearItemRelatedCaches(Long itemId) {

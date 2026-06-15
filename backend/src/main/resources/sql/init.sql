@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS item (
     is_top TINYINT DEFAULT 0,
     view_count INT DEFAULT 0,
     like_count INT DEFAULT 0,
+    share_count INT DEFAULT 0,
     create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
     update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     deleted TINYINT DEFAULT 0,
@@ -150,6 +151,20 @@ INSERT IGNORE INTO category (id, name, icon, sort_order) VALUES
 (4, '母婴儿童', 'Cpu', 4),
 (5, '运动户外', 'Bicycle', 5),
 (6, '服饰鞋包', 'Trophy', 6);
+
+CREATE TABLE IF NOT EXISTS share_record (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    item_id BIGINT NOT NULL,
+    sharer_user_id BIGINT NOT NULL,
+    visitor_user_id BIGINT,
+    share_channel VARCHAR(50),
+    share_type VARCHAR(20) DEFAULT 'link',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_item_id(item_id),
+    INDEX idx_sharer_user_id(sharer_user_id),
+    INDEX idx_visitor_user_id(visitor_user_id),
+    INDEX idx_create_time(create_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 CREATE TABLE IF NOT EXISTS user_review (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,

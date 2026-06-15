@@ -32,6 +32,8 @@ public class Item {
     
     private Integer likeCount;
     
+    private Integer shareCount;
+    
     @TableField(fill = FieldFill.INSERT)
     private LocalDateTime createTime;
     

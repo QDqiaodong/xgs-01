@@ -18,6 +18,9 @@ public interface ItemMapper extends BaseMapper<Item> {
     @Update("UPDATE item SET view_count = view_count + #{increment} WHERE id = #{itemId} AND deleted = 0")
     int updateViewCount(@Param("itemId") Long itemId, @Param("increment") int increment);
 
+    @Update("UPDATE item SET share_count = share_count + #{increment} WHERE id = #{itemId} AND deleted = 0")
+    int updateShareCount(@Param("itemId") Long itemId, @Param("increment") int increment);
+
     @Select("<script>" +
             "SELECT i.* FROM item i " +
             "LEFT JOIN user u ON i.user_id = u.id " +

@@ -3,9 +3,9 @@
     <div class="ranking-header">
       <h1 class="page-title">
         <el-icon :size="32"><Trophy /></el-icon>
-        点赞排行榜
+        热度排行榜
       </h1>
-      <p class="ranking-subtitle">最受欢迎的闲置物品 Top 榜</p>
+      <p class="ranking-subtitle">综合点赞、分享、浏览量的闲置物品 Top 榜</p>
     </div>
 
     <div class="ranking-content">

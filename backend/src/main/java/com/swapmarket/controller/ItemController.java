@@ -4,7 +4,7 @@ import com.swapmarket.common.PageResult;
 import com.swapmarket.common.Result;
 import com.swapmarket.entity.Item;
 import com.swapmarket.service.ItemService;
-import lombok.Data;
+import com.swapmarket.service.ShareService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -17,6 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ItemController {
     private final ItemService itemService;
+    private final ShareService shareService;
 
     @GetMapping("/top")
     public Result<List<Item>> getTopItems(@RequestParam(required = false) Long userId) {
@@ -62,11 +63,6 @@ public class ItemController {
         return Result.success();
     }
 
-    @GetMapping("/{id}")
-    public Result<Item> getDetail(@PathVariable Long id, @RequestParam(required = false) Long userId) {
-        return Result.success(itemService.getDetail(id, userId));
-    }
-
     @PostMapping("/publish")
     public Result<Item> publish(
             @RequestParam Long userId,
@@ -108,5 +104,35 @@ public class ItemController {
             @RequestParam(defaultValue = "10") int limit,
             @RequestParam(required = false) Long userId) {
         return Result.success(itemService.getLikeRanking(limit, userId));
+    }
+
+    @PostMapping("/share/{id}")
+    public Result<Void> recordShare(
+            @PathVariable Long id,
+            @RequestParam Long userId,
+            @RequestParam(required = false) String shareChannel,
+            @RequestParam(required = false) String shareType) {
+        shareService.recordShare(id, userId, shareChannel, shareType);
+        return Result.success();
+    }
+
+    @PostMapping("/share/visit")
+    public Result<Void> recordShareVisit(
+            @RequestParam Long itemId,
+            @RequestParam Long sharerUserId,
+            @RequestParam(required = false) Long visitorUserId) {
+        shareService.recordShareVisit(itemId, sharerUserId, visitorUserId);
+        return Result.success();
+    }
+
+    @GetMapping("/{id}")
+    public Result<Item> getDetail(
+            @PathVariable Long id,
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) Long sharerId) {
+        if (sharerId != null && !sharerId.equals(userId)) {
+            shareService.recordShareVisit(id, sharerId, userId);
+        }
+        return Result.success(itemService.getDetail(id, userId));
     }
 }
